@@ -1,0 +1,26 @@
+{
+  "name": "HYDROMEM Dynamics AI",
+  "short_name": "HYDROMEM",
+  "description": "منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#667eea",
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/ghythanbdalghny97-ui/hydromem-dynamics-ai/main/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://raw.githubusercontent.com/ghythanbdalghny97-ui/hydromem-dynamics-ai/main/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
