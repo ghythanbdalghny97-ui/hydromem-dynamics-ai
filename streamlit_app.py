@@ -11,7 +11,7 @@
 HYDROMEM Dynamics AI
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
 Computational Intelligence Platform for Complex Dynamic Systems
-Version 7.0 — Unified Platform (5 Apps + 3 AI Components)
+Version 8.0 — Commercial Platform (5 Apps + 3 AI + Pricing)
 
 Author: عبد الغني صالح محسن محمد غيثان
         Abdulghani Saleh Mohsen Mohammed Ghaithan
@@ -30,6 +30,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, r2_score, mean_squared_error
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from datetime import datetime, timedelta
+import pandas as pd
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -45,6 +47,21 @@ st.markdown("""
     .main { direction: rtl; text-align: right; }
     .stMetric { direction: rtl; }
     h1, h2, h3 { direction: rtl; text-align: right; }
+    .pricing-card {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 20px;
+        border-radius: 15px;
+        margin: 10px 0;
+        text-align: center;
+    }
+    .premium-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        margin: 10px 0;
+        text-align: center;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -180,8 +197,295 @@ def train_regressor():
 
 
 # ============================================================
+#              نظام التسعير والاشتراكات
+# ============================================================
+
+PLANS = {
+    "free": {
+        "name": "🆓 مجاني", "name_en": "Free",
+        "price_yemen": 0, "price_gulf": 0, "price_global": 0,
+        "duration_days": 999999, "max_trials": 10,
+        "features": {"ai": False, "csv": False, "pdf": False,
+                     "api": False, "support": "لا يوجد", "training": False}
+    },
+    "weekly": {
+        "name": "📅 أسبوعي", "name_en": "Weekly",
+        "price_yemen": 2, "price_gulf": 9.99, "price_global": 19.99,
+        "duration_days": 7, "max_trials": -1,
+        "features": {"ai": True, "csv": True, "pdf": False,
+                     "api": False, "support": "بريد", "training": False}
+    },
+    "monthly": {
+        "name": "📆 شهري", "name_en": "Monthly",
+        "price_yemen": 7, "price_gulf": 29.99, "price_global": 49.99,
+        "duration_days": 30, "max_trials": -1,
+        "features": {"ai": True, "csv": True, "pdf": True,
+                     "api": False, "support": "بريد", "training": False}
+    },
+    "yearly": {
+        "name": "⭐ سنوي", "name_en": "Yearly",
+        "price_yemen": 50, "price_gulf": 199, "price_global": 399,
+        "duration_days": 365, "max_trials": -1,
+        "features": {"ai": True, "csv": True, "pdf": True,
+                     "api": True, "support": "بريد + واتساب", "training": False}
+    },
+    "pro_monthly": {
+        "name": "🩺 احترافي شهري", "name_en": "Pro Monthly",
+        "price_yemen": 15, "price_gulf": 59, "price_global": 99,
+        "duration_days": 30, "max_trials": -1,
+        "features": {"ai": True, "csv": True, "pdf": True,
+                     "api": True, "support": "مباشر", "training": True}
+    },
+    "pro_yearly": {
+        "name": "🏆 احترافي سنوي", "name_en": "Pro Yearly",
+        "price_yemen": 120, "price_gulf": 499, "price_global": 799,
+        "duration_days": 365, "max_trials": -1,
+        "features": {"ai": True, "csv": True, "pdf": True,
+                     "api": True, "support": "مباشر", "training": True}
+    }
+}
+
+ENTERPRISE_PLANS = {
+    "university": {
+        "name": "🏫 باقة الجامعة",
+        "price_yemen": 500, "price_gulf": 2500, "price_global": 5000,
+        "features": ["حتى 200 طالب", "كل الميزات", "لوحة تحكم إدارية",
+                     "تدريب مخصص", "دعم فني مباشر"]
+    },
+    "hospital": {
+        "name": "🏥 باقة المستشفى",
+        "price_yemen": 2000, "price_gulf": 10000, "price_global": 25000,
+        "features": ["عدد أطباء غير محدود", "كل الميزات", "API Access",
+                     "تكامل مع الأنظمة", "دعم مخصص 24/7"]
+    },
+    "pharma": {
+        "name": "💊 باقة شركة الأدوية",
+        "price_yemen": 10000, "price_gulf": 50000, "price_global": 200000,
+        "features": ["نموذج مخصص", "تطوير خاص", "شريك بحثي",
+                     "بيانات خاصة", "دعم مخصص 24/7"]
+    }
+}
+
+
+def init_user_session():
+    defaults = {
+        'user_plan': 'free', 'trials_used': 0,
+        'subscription_start': None, 'subscription_end': None,
+        'user_email': None, 'show_pricing': False,
+        'pricing_region': 'gulf'
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def get_current_plan():
+    return PLANS[st.session_state.user_plan]
+
+
+def can_use_trial():
+    plan = get_current_plan()
+    if plan['max_trials'] == -1:
+        return True
+    return st.session_state.trials_used < plan['max_trials']
+
+
+def can_use_ai():
+    return get_current_plan()['features']['ai']
+
+
+def use_trial():
+    if can_use_trial():
+        st.session_state.trials_used += 1
+        return True
+    return False
+
+
+def remaining_trials():
+    plan = get_current_plan()
+    if plan['max_trials'] == -1:
+        return "∞ غير محدود"
+    return max(0, plan['max_trials'] - st.session_state.trials_used)
+
+
+def subscribe(plan_key):
+    plan = PLANS[plan_key]
+    st.session_state.user_plan = plan_key
+    st.session_state.subscription_start = datetime.now()
+    st.session_state.subscription_end = datetime.now() + timedelta(days=plan['duration_days'])
+    return True
+
+
+def show_subscription_status():
+    plan = get_current_plan()
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 💳 حالة الاشتراك")
+    
+    if st.session_state.user_plan == 'free':
+        remaining = remaining_trials()
+        st.sidebar.warning(f"**الباقة:** {plan['name']}")
+        st.sidebar.info(f"**التجارب المتبقية:** {remaining} / 10")
+        progress = st.session_state.trials_used / 10
+        st.sidebar.progress(min(progress, 1.0))
+        
+        if st.session_state.trials_used >= 10:
+            st.sidebar.error("⚠️ انتهت تجاربك المجانية!")
+        
+        if st.sidebar.button("🚀 ترقية الآن", use_container_width=True, type="primary"):
+            st.session_state.show_pricing = True
+            st.rerun()
+    else:
+        st.sidebar.success(f"**الباقة:** {plan['name']}")
+        if st.session_state.subscription_end:
+            days_left = max(0, (st.session_state.subscription_end - datetime.now()).days)
+            st.sidebar.info(f"**متبقي:** {days_left} يوم")
+        
+        if st.sidebar.button("🔄 تغيير الباقة", use_container_width=True):
+            st.session_state.show_pricing = True
+            st.rerun()
+
+
+def show_pricing_page():
+    st.header("💎 باقات الاشتراك الاحترافية")
+    st.markdown("### اختر الباقة المناسبة لاحتياجك — جميع الأسعار تنافسية وعالمية")
+    st.markdown("---")
+    
+    region = st.radio(
+        "🌍 اختر منطقتك لعرض الأسعار المناسبة:",
+        ["🌴 الخليج والشرق الأوسط", "🌍 عالمي (دولي)", "🇾🇪 اليمن (محلي)"],
+        horizontal=True
+    )
+    region_map = {
+        "🌴 الخليج والشرق الأوسط": "gulf",
+        "🌍 عالمي (دولي)": "global",
+        "🇾🇪 اليمن (محلي)": "yemen"
+    }
+    region_key = region_map[region]
+    st.session_state.pricing_region = region_key
+    currency = "$"
+    
+    st.markdown("---")
+    st.markdown("## 🎯 الباقات الفردية")
+    st.markdown("*مثالية للباحثين والطلاب والمهنيين الأفراد*")
+    
+    # الباقات الثلاث الأساسية
+    c1, c2, c3 = st.columns(3)
+    
+    with c1:
+        st.markdown("### 🆓 مجاني")
+        st.markdown("# $0")
+        st.markdown("**10 تجارب مجانية**")
+        st.markdown("---")
+        st.markdown("✅ محاكاة كاملة")
+        st.markdown("✅ تحليل الاستقرار")
+        st.markdown("❌ مكونات AI")
+        st.markdown("❌ تحميل النتائج")
+        st.markdown("❌ API Access")
+        if st.session_state.user_plan == 'free':
+            st.success("✅ باقتك الحالية")
+    
+    with c2:
+        st.markdown("### 📆 شهري")
+        st.markdown(f"# {currency}{PLANS['monthly'][f'price_{region_key}']}")
+        st.markdown("**30 يوماً**")
+        st.markdown("---")
+        st.markdown("✅ محاكاة غير محدودة")
+        st.markdown("✅ 3 مكونات AI")
+        st.markdown("✅ تقارير PDF")
+        st.markdown("✅ تحميل CSV")
+        st.markdown("✅ دعم بريد")
+        if st.session_state.user_plan == 'monthly':
+            st.success("✅ باقتك الحالية")
+        else:
+            if st.button("اشترك شهرياً", key='btn_m', type='primary', use_container_width=True):
+                subscribe('monthly')
+                st.success("✅ تم الاشتراك!")
+                st.rerun()
+    
+    with c3:
+        st.markdown("### ⭐ سنوي")
+        st.markdown(f"# {currency}{PLANS['yearly'][f'price_{region_key}']}")
+        st.markdown("**365 يوماً — وفّر 30%** 💰")
+        st.markdown("---")
+        st.markdown("✅ كل ما في الشهري")
+        st.markdown("✅ API Access")
+        st.markdown("✅ دعم واتساب")
+        st.markdown("✅ أولوية في الدعم")
+        st.markdown("✅ تحديثات مجانية")
+        if st.session_state.user_plan == 'yearly':
+            st.success("✅ باقتك الحالية")
+        else:
+            if st.button("اشترك سنوياً", key='btn_y', type='primary', use_container_width=True):
+                subscribe('yearly')
+                st.success("✅ تم الاشتراك!")
+                st.rerun()
+    
+    st.markdown("---")
+    st.markdown("## 💼 الباقات الاحترافية")
+    st.markdown("*للأطباء والباحثين الجادين والمهنيين*")
+    
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        st.markdown("### 🩺 احترافي شهري")
+        st.markdown(f"# {currency}{PLANS['pro_monthly'][f'price_{region_key}']}")
+        st.markdown("**30 يوماً**")
+        st.markdown("---")
+        st.markdown("✅ كل ما في السنوي")
+        st.markdown("✅ **دعم مباشر فوري**")
+        st.markdown("✅ **تدريب مخصص**")
+        st.markdown("✅ **مراجعة النتائج**")
+        if st.session_state.user_plan == 'pro_monthly':
+            st.success("✅ باقتك الحالية")
+        else:
+            if st.button("اشترك احترافي شهري", key='btn_pm', type='primary', use_container_width=True):
+                subscribe('pro_monthly')
+                st.success("✅ تم الاشتراك!")
+                st.rerun()
+    
+    with c2:
+        st.markdown("### 🏆 احترافي سنوي")
+        st.markdown(f"# {currency}{PLANS['pro_yearly'][f'price_{region_key}']}")
+        st.markdown("**365 يوماً — وفّر 33%** 💰")
+        st.markdown("---")
+        st.markdown("✅ كل ما في الاحترافي الشهري")
+        st.markdown("✅ **توفير 33%**")
+        st.markdown("✅ **أولوية قصوى**")
+        st.markdown("✅ **استشارات شهرية**")
+        if st.session_state.user_plan == 'pro_yearly':
+            st.success("✅ باقتك الحالية")
+        else:
+            if st.button("اشترك احترافي سنوي", key='btn_py', type='primary', use_container_width=True):
+                subscribe('pro_yearly')
+                st.success("✅ تم الاشتراك!")
+                st.rerun()
+    
+    st.markdown("---")
+    st.markdown("## 🏢 الباقات المؤسسية")
+    st.markdown("*للجامعات والمستشفيات وشركات الأدوية*")
+    
+    c1, c2, c3 = st.columns(3)
+    for i, (key, plan) in enumerate(ENTERPRISE_PLANS.items()):
+        with [c1, c2, c3][i]:
+            st.markdown(f"### {plan['name']}")
+            st.markdown(f"# {currency}{plan[f'price_{region_key}']:,}")
+            st.markdown("**سنوياً**")
+            st.markdown("---")
+            for feature in plan['features']:
+                st.markdown(f"✅ {feature}")
+            st.markdown("📧 **للتواصل:** ghythanbdalghny97@gmail.com")
+            st.markdown("📞 **+967 779193805**")
+    
+    st.markdown("---")
+    st.info("💡 **طرق الدفع المتاحة:** بطاقات الائتمان | PayPal | تحويل بنكي | محافظ إلكترونية")
+    st.success("📧 للاستفسارات: ghythanbdalghny97@gmail.com | 📞 +967 779193805")
+
+
+# ============================================================
 #                    الواجهة الرئيسية
 # ============================================================
+
+init_user_session()
 
 st.title("🧬 HYDROMEM Dynamics AI")
 st.markdown("### منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة")
@@ -190,6 +494,7 @@ st.markdown("---")
 
 app = st.sidebar.radio("🔬 اختر التطبيق:", [
     "🏠 الرئيسية",
+    "💎 باقات الاشتراك",
     "⚙️ النموذج الديناميكي العام",
     "🦵 خشونة الركبة",
     "🦴 التئام العظام",
@@ -201,12 +506,14 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 st.sidebar.markdown("---")
 st.sidebar.info(
     "**HYDROMEM Dynamics AI**\n\n"
-    "الإصدار 7.0\n\n"
+    "الإصدار 8.0\n\n"
     "5 تطبيقات + 3 مكونات AI\n\n"
     "TRL 3"
 )
 st.sidebar.markdown("---")
 st.sidebar.markdown("[📂 GitHub](https://github.com/ghythanbdalghny97-ui/hydromem-dynamics-ai)")
+
+show_subscription_status()
 
 
 # ============================================================
@@ -241,6 +548,19 @@ if app == "🏠 الرئيسية":
         - الواجهة: Streamlit Web App
         """)
         st.success("✅ 5 تطبيقات حية + 3 مكونات AI منفذة")
+        
+        if st.session_state.user_plan == 'free':
+            st.warning(f"⚠️ باقتك المجانية: {remaining_trials()}")
+            if st.button("💎 ترقية الآن للاستفادة من كل الميزات"):
+                st.session_state.show_pricing = True
+                st.rerun()
+
+
+# ============================================================
+#              صفحة التسعير
+# ============================================================
+elif app == "💎 باقات الاشتراك":
+    show_pricing_page()
 
 
 # ============================================================
@@ -294,6 +614,8 @@ elif app == "⚙️ النموذج الديناميكي العام":
         st.success("✅ استقرار محلي (Re(λ) < 0)")
     else:
         st.warning("⚠️ النظام قد لا يكون مستقراً")
+    
+    use_trial()
 
 
 # ============================================================
@@ -332,6 +654,8 @@ elif app == "🦵 خشونة الركبة":
     c1.metric("الصلابة النهائية", f"{s[-1,1]:.4f}")
     c2.metric("مرحلة KL", classify_kl(s[-1,1]))
     c3.metric("MMP النهائي", f"{s[-1,0]:.4f}")
+    
+    use_trial()
 
 
 # ============================================================
@@ -368,6 +692,8 @@ elif app == "🦴 التئام العظام":
     c1.metric("الصلابة النهائية", f"{C:.2f}")
     c2.metric("نسبة الحمل", f"{(C/Cm)*100:.1f}%")
     c3.metric("المرحلة", healing_stage(C, Cm))
+    
+    use_trial()
 
 
 # ============================================================
@@ -407,6 +733,8 @@ elif app == "💧 الأقراص الفقرية":
     c1.metric("الماء النهائي", f"{s[-1,0]*100:.1f}%")
     c2.metric("الارتفاع", f"{s[-1,1]:.4f}")
     c3.metric("الضغط", f"{s[-1,2]:.4f}")
+    
+    use_trial()
 
 
 # ============================================================
@@ -457,110 +785,132 @@ elif app == "🩹 التئام الجروح":
     c1.metric("التغطية", f"{max(s[-1,0],0)*100:.1f}%")
     c2.metric("الكولاجين", f"{max(s[-1,2],0)*100:.1f}%")
     c3.metric("البكتيريا", f"{s[-1,4]:.4f}")
+    
+    use_trial()
 
 
 # ============================================================
 #         مكونات الذكاء الاصطناعي
 # ============================================================
 elif app == "🧠 مكونات الذكاء الاصطناعي":
-    st.header("🧠 مكونات الذكاء الاصطناعي المنفذة")
-    st.markdown("**AI Components — Trained & Deployed**")
-    st.markdown("---")
-
-    tab1, tab2, tab3 = st.tabs([
-        "⚡ Surrogate Model",
-        "🎯 Stability Classifier",
-        "📊 Stiffness Regressor"
-    ])
-
-    with tab1:
-        st.subheader("⚡ Surrogate Model (النموذج البديل)")
-        st.markdown("""
-        نموذج MLP يتنبأ بسلوك النظام في **أقل من 10ms**
-        بدلاً من ~500ms باستخدام odeint.
+    if not can_use_ai():
+        st.error("🔒 **هذه الميزة متاحة فقط في الباقات المدفوعة**")
+        st.markdown("---")
+        st.warning("""
+        ### 💎 مكونات AI المحمية:
+        - ⚡ **Surrogate Model** — تنبؤ سريع 50×
+        - 🎯 **Stability Classifier** — دقة 99.25%
+        - 📊 **Stiffness Regressor** — R² = 0.9942
+        
+        هذه المكونات توفر:
+        - تنبؤات فورية بدلاً من انتظار المحاكاة
+        - تحليل ذكي للبيانات
+        - دقة علمية عالية
         """)
-        with st.spinner("جاري تدريب النموذج البديل..."):
-            sm, loss = train_surrogate()
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Test MSE", f"{loss:.6f}")
-        c2.metric("Speedup", "~50×")
-        c3.metric("Architecture", "64-128-64")
-        st.success("✅ Surrogate Model trained successfully")
+        st.markdown("---")
+        st.markdown("### 🚀 قم بالترقية الآن للوصول إلى كل الميزات:")
+        if st.button("💎 عرض الباقات والترقية", type="primary", use_container_width=True):
+            st.session_state.show_pricing = True
+            st.rerun()
+    else:
+        st.header("🧠 مكونات الذكاء الاصطناعي المنفذة")
+        st.markdown("**AI Components — Trained & Deployed**")
+        st.markdown("---")
 
-        st.markdown("#### 🔮 اختبار التنبؤ السريع")
-        c1, c2 = st.columns(2)
-        with c1:
-            mu_t = st.slider("μ", 0.1, 2.0, 1.0, 0.1, key='sm_mu')
-            k_t  = st.slider("κ", 0.0, 2.0, 0.5, 0.1, key='sm_k')
-        with c2:
-            b_t = st.slider("β", 0.1, 2.0, 0.8, 0.1, key='sm_b')
-            g_t = st.slider("γ", 0.0, 1.0, 0.3, 0.05, key='sm_g')
+        tab1, tab2, tab3 = st.tabs([
+            "⚡ Surrogate Model",
+            "🎯 Stability Classifier",
+            "📊 Stiffness Regressor"
+        ])
 
-        if st.button("🔮 تنبؤ سريع", key='predict_sm'):
-            pred = sm.predict([[mu_t, k_t, b_t, g_t, 0.5, 0.2]])[0]
+        with tab1:
+            st.subheader("⚡ Surrogate Model (النموذج البديل)")
+            st.markdown("""
+            نموذج MLP يتنبأ بسلوك النظام في **أقل من 10ms**
+            بدلاً من ~500ms باستخدام odeint.
+            """)
+            with st.spinner("جاري تدريب النموذج البديل..."):
+                sm, loss = train_surrogate()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Test MSE", f"{loss:.6f}")
+            c2.metric("Speedup", "~50×")
+            c3.metric("Architecture", "64-128-64")
+            st.success("✅ Surrogate Model trained successfully")
+
+            st.markdown("#### 🔮 اختبار التنبؤ السريع")
             c1, c2 = st.columns(2)
-            c1.metric("A النهائي", f"{pred[0]:.4f}")
-            c2.metric("Θ النهائي", f"{pred[1]:.4f}")
+            with c1:
+                mu_t = st.slider("μ", 0.1, 2.0, 1.0, 0.1, key='sm_mu')
+                k_t  = st.slider("κ", 0.0, 2.0, 0.5, 0.1, key='sm_k')
+            with c2:
+                b_t = st.slider("β", 0.1, 2.0, 0.8, 0.1, key='sm_b')
+                g_t = st.slider("γ", 0.0, 1.0, 0.3, 0.05, key='sm_g')
 
-    with tab2:
-        st.subheader("🎯 Stability Classifier (مصنف الاستقرار)")
-        st.markdown("""
-        مصنف Random Forest يتنبأ باستقرار النظام
-        بناءً على المعاملات الأربعة (μ, κ, β, γ).
-        """)
-        with st.spinner("جاري تدريب المصنف..."):
-            clf, acc = train_classifier()
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Accuracy", f"{acc*100:.2f}%")
-        c2.metric("Trees", "100")
-        c3.metric("Samples", "1000")
-        st.success("✅ Stability Classifier trained successfully")
+            if st.button("🔮 تنبؤ سريع", key='predict_sm'):
+                pred = sm.predict([[mu_t, k_t, b_t, g_t, 0.5, 0.2]])[0]
+                c1, c2 = st.columns(2)
+                c1.metric("A النهائي", f"{pred[0]:.4f}")
+                c2.metric("Θ النهائي", f"{pred[1]:.4f}")
 
-        st.markdown("#### 🔍 اختبار التصنيف")
-        c1, c2 = st.columns(2)
-        with c1:
-            mu_c = st.slider("μ", -0.5, 3.0, 1.0, 0.1, key='cl_mu')
-            k_c  = st.slider("κ", -1.0, 3.0, 0.5, 0.1, key='cl_k')
-        with c2:
-            b_c = st.slider("β", -0.5, 2.5, 0.8, 0.1, key='cl_b')
-            g_c = st.slider("γ", -0.5, 1.5, 0.3, 0.05, key='cl_g')
+        with tab2:
+            st.subheader("🎯 Stability Classifier (مصنف الاستقرار)")
+            st.markdown("""
+            مصنف Random Forest يتنبأ باستقرار النظام
+            بناءً على المعاملات الأربعة (μ, κ, β, γ).
+            """)
+            with st.spinner("جاري تدريب المصنف..."):
+                clf, acc = train_classifier()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Accuracy", f"{acc*100:.2f}%")
+            c2.metric("Trees", "100")
+            c3.metric("Samples", "1000")
+            st.success("✅ Stability Classifier trained successfully")
 
-        if st.button("🔍 تصنيف", key='classify_btn'):
-            pred = clf.predict([[mu_c, k_c, b_c, g_c]])[0]
-            proba = clf.predict_proba([[mu_c, k_c, b_c, g_c]])[0]
-            if pred == 1:
-                st.success(f"✅ النظام مستقر (ثقة: {proba[1]*100:.1f}%)")
-            else:
-                st.error(f"❌ النظام غير مستقر (ثقة: {proba[0]*100:.1f}%)")
-
-    with tab3:
-        st.subheader("📊 Stiffness Regressor (مقدّر الصلابة)")
-        st.markdown("""
-        نموذج MLP مع StandardScaler يتنبأ بالصلابة النهائية للركبة
-        بناءً على معاملات المريض.
-        """)
-        with st.spinner("جاري تدريب المقدّر..."):
-            reg, r2 = train_regressor()
-        c1, c2, c3 = st.columns(3)
-        c1.metric("R² Score", f"{r2:.4f}")
-        c2.metric("RMSE", "< 0.05")
-        c3.metric("Architecture", "128-64-32")
-        st.success("✅ Stiffness Regressor trained successfully")
-
-        st.markdown("#### 🔮 اختبار التنبؤ بالصلابة")
-        c1, c2 = st.columns(2)
-        with c1:
-            yrs_r = st.slider("السنوات", 1, 25, 10, key='reg_y')
-            kp_r  = st.slider("k_prod", 0.003, 0.012, 0.005, 0.001, key='reg_kp')
-        with c2:
-            kd_r = st.slider("k_deg", 0.008, 0.025, 0.015, 0.001, key='reg_kd')
-            a_r  = st.slider("alpha", 0.00005, 0.0004, 0.00010, 0.00005, key='reg_a')
-
-        if st.button("🔮 تنبؤ", key='reg_btn'):
-            pred = reg.predict([[yrs_r, kp_r, kd_r, a_r]])[0]
+            st.markdown("#### 🔍 اختبار التصنيف")
             c1, c2 = st.columns(2)
-            c1.metric("الصلابة المتوقعة", f"{pred:.4f}")
-            c2.metric("المرحلة", classify_kl(pred))
+            with c1:
+                mu_c = st.slider("μ", -0.5, 3.0, 1.0, 0.1, key='cl_mu')
+                k_c  = st.slider("κ", -1.0, 3.0, 0.5, 0.1, key='cl_k')
+            with c2:
+                b_c = st.slider("β", -0.5, 2.5, 0.8, 0.1, key='cl_b')
+                g_c = st.slider("γ", -0.5, 1.5, 0.3, 0.05, key='cl_g')
+
+            if st.button("🔍 تصنيف", key='classify_btn'):
+                pred = clf.predict([[mu_c, k_c, b_c, g_c]])[0]
+                proba = clf.predict_proba([[mu_c, k_c, b_c, g_c]])[0]
+                if pred == 1:
+                    st.success(f"✅ النظام مستقر (ثقة: {proba[1]*100:.1f}%)")
+                else:
+                    st.error(f"❌ النظام غير مستقر (ثقة: {proba[0]*100:.1f}%)")
+
+        with tab3:
+            st.subheader("📊 Stiffness Regressor (مقدّر الصلابة)")
+            st.markdown("""
+            نموذج MLP مع StandardScaler يتنبأ بالصلابة النهائية للركبة
+            بناءً على معاملات المريض.
+            """)
+            with st.spinner("جاري تدريب المقدّر..."):
+                reg, r2 = train_regressor()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("R² Score", f"{r2:.4f}")
+            c2.metric("RMSE", "< 0.05")
+            c3.metric("Architecture", "128-64-32")
+            st.success("✅ Stiffness Regressor trained successfully")
+
+            st.markdown("#### 🔮 اختبار التنبؤ بالصلابة")
+            c1, c2 = st.columns(2)
+            with c1:
+                yrs_r = st.slider("السنوات", 1, 25, 10, key='reg_y')
+                kp_r  = st.slider("k_prod", 0.003, 0.012, 0.005, 0.001, key='reg_kp')
+            with c2:
+                kd_r = st.slider("k_deg", 0.008, 0.025, 0.015, 0.001, key='reg_kd')
+                a_r  = st.slider("alpha", 0.00005, 0.0004, 0.00010, 0.00005, key='reg_a')
+
+            if st.button("🔮 تنبؤ", key='reg_btn'):
+                pred = reg.predict([[yrs_r, kp_r, kd_r, a_r]])[0]
+                c1, c2 = st.columns(2)
+                c1.metric("الصلابة المتوقعة", f"{pred:.4f}")
+                c2.metric("المرحلة", classify_kl(pred))
 
 
 # ============================================================
@@ -570,8 +920,8 @@ st.markdown("---")
 st.markdown(
     "**HYDROMEM Dynamics AI** — "
     "منصة ذكاء حاسوبي متعددة التطبيقات | "
-    "الإصدار 7.0 | "
+    "الإصدار 8.0 | "
     "5 تطبيقات + 3 مكونات AI | "
     "TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
-)
+        )
