@@ -1,9 +1,22 @@
+# ============================================================
+# HYDROMEM Dynamics AI
+# Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
+# عبد الغني صالح محسن محمد غيثان — اليمن
+# SPDX-License-Identifier: LicenseRef-Proprietary
+# All Rights Reserved.
+# ============================================================
+
 """
 ============================================================
 HYDROMEM Dynamics AI
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
 Computational Intelligence Platform for Complex Dynamic Systems
 Version 7.0 — Unified Platform (5 Apps + 3 AI Components)
+
+Author: عبد الغني صالح محسن محمد غيثان
+        Abdulghani Saleh Mohsen Mohammed Ghaithan
+Location: Yemen — اليمن
+Contact: ghythanbdalghny97@gmail.com
 ============================================================
 """
 
@@ -560,5 +573,5 @@ st.markdown(
     "الإصدار 7.0 | "
     "5 تطبيقات + 3 مكونات AI | "
     "TRL 3 | "
-    "© عبد الغني غيثان 2026"
+    "© عبد الغني صالح محسن محمد غيثان 2026"
 )
