@@ -11,13 +11,13 @@
   "dir": "rtl",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/ghythanbdalghny97-ui/hydromem-dynamics-ai/main/icon-192.png",
+      "src": "https://dummyimage.com/192x192/667eea/ffffff.png&text=H",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://raw.githubusercontent.com/ghythanbdalghny97-ui/hydromem-dynamics-ai/main/icon-512.png",
+      "src": "https://dummyimage.com/512x512/667eea/ffffff.png&text=H",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
