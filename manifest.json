@@ -1,7 +1,7 @@
 {
   "name": "HYDROMEM Dynamics AI",
   "short_name": "HYDROMEM",
-  "description": "منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة",
+  "description": "Computational Intelligence Platform for Complex Dynamic Systems",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
