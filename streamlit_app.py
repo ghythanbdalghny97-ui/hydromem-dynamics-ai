@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v11.0
+HYDROMEM Dynamics AI v12.0
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 11.0 — Full Platform (5 Apps + 3 AI + Reports + PWA)
+Version 12.0 — Full Platform with Supabase Integration
 ============================================================
 """
 
@@ -28,6 +28,13 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
+# Supabase imports
+from supabase_utils import (
+    init_supabase, add_customer, get_all_customers,
+    get_expiring_customers, activate_subscription,
+    update_customer_status, delete_customer, get_stats
+)
+
 st.set_page_config(
     page_title="HYDROMEM Dynamics AI",
     page_icon="🧬",
@@ -35,9 +42,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ============================================================
-#                    PWA Configuration
-# ============================================================
+# Initialize Supabase
+try:
+    init_supabase(
+        st.secrets.get("SUPABASE_URL", ""),
+        st.secrets.get("SUPABASE_KEY", "")
+    )
+except Exception:
+    pass
+
+# PWA Configuration
 st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
@@ -46,7 +60,6 @@ st.markdown("""
 <meta name="apple-mobile-web-app-title" content="HYDROMEM">
 <meta name="theme-color" content="#667eea">
 <meta name="application-name" content="HYDROMEM Dynamics AI">
-<meta name="description" content="Computational Intelligence Platform for Complex Dynamic Systems">
 <link rel="manifest" href="https://raw.githubusercontent.com/ghythanbdalghny97-ui/hydromem-dynamics-ai/main/manifest.json">
 <link rel="apple-touch-icon" href="https://dummyimage.com/192x192/667eea/ffffff.png&text=H">
 <link rel="icon" type="image/png" sizes="192x192" href="https://dummyimage.com/192x192/667eea/ffffff.png&text=H">
@@ -57,10 +70,6 @@ st.markdown("""
     .main { direction: rtl; text-align: right; }
     .stMetric { direction: rtl; }
     h1, h2, h3, h4 { direction: rtl; text-align: right; }
-    .report-card {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        padding: 25px; border-radius: 15px; margin: 15px 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -82,7 +91,6 @@ def add_values_on_plot(ax, x, y, num_points=5, color='black', fmt='{:.3f}'):
                                   facecolor='white', edgecolor=color, alpha=0.7))
 
 def time_to_reach(values, times, threshold, direction='decrease'):
-    """حساب الوقت للوصول إلى عتبة معينة"""
     for i, v in enumerate(values):
         if direction == 'decrease' and v <= threshold:
             return times[i]
@@ -106,7 +114,7 @@ def healing_stage(C, Cm):
 
 
 # ============================================================
-#                  النماذج الرياضية الخمسة
+#                  النماذج الرياضية
 # ============================================================
 
 def general(y, t, mu, k, b, g):
@@ -146,7 +154,6 @@ def wound(y, t, p):
 # ============================================================
 
 def generate_report(app_name, results, timeline, recommendations):
-    """إنشاء تقرير طبي شامل"""
     st.markdown("---")
     st.subheader("📄 التقرير الطبي التلقائي")
 
@@ -182,13 +189,10 @@ def generate_report(app_name, results, timeline, recommendations):
 
     st.error("""
     ⚠️ **إخلاء مسؤولية طبية:**
-    
-    هذا التقرير لأغراض **بحثية وتعليمية فقط**. 
+    هذا التقرير لأغراض **بحثية وتعليمية فقط**.
     لا يُعدّ تشخيصاً طبياً ولا بديلاً عن استشارة طبيب مختص.
-    القرار الطبي النهائي يعود للطبيب المعالج.
     """)
 
-    # بناء نص التقرير للتحميل
     txt = f"HYDROMEM Dynamics AI - Medical Report\n"
     txt += "=" * 50 + "\n"
     txt += f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
@@ -206,8 +210,7 @@ def generate_report(app_name, results, timeline, recommendations):
             txt += f"  [{cat}]\n"
             for it in items:
                 txt += f"    - {it}\n"
-    txt += "\nDISCLAIMER:\nThis report is for research purposes only.\n"
-    txt += "Contact: ghythanbdalghny97@gmail.com | +967 779193805\n"
+    txt += "\nContact: ghythanbdalghny97@gmail.com | +967 779193805\n"
 
     st.download_button(
         label="📥 تحميل التقرير (TXT)",
@@ -316,29 +319,23 @@ PLANS = {
                     "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
     "pro_yearly": {"name": "🏆 احترافي سنوي", "price_yemen": 120, "price_gulf": 499, "price_global": 799,
                    "duration_days": 365, "max_trials": -1,
-                   "features": {"ai": True, "csv": True, "pdf": True, "api": True}}
-}
-
-ENTERPRISE_PLANS = {
-    "university": {"name": "🏫 باقة الجامعة",
-                   "price_yemen": 500, "price_gulf": 2500, "price_global": 5000,
-                   "features": ["حتى 200 طالب", "كل الميزات", "لوحة تحكم إدارية",
-                                "تدريب مخصص", "دعم فني مباشر"]},
-    "hospital": {"name": "🏥 باقة المستشفى",
-                 "price_yemen": 2000, "price_gulf": 10000, "price_global": 25000,
-                 "features": ["عدد أطباء غير محدود", "كل الميزات", "API Access",
-                              "تكامل مع الأنظمة", "دعم مخصص 24/7"]},
-    "pharma": {"name": "💊 باقة شركة الأدوية",
-               "price_yemen": 10000, "price_gulf": 50000, "price_global": 200000,
-               "features": ["نموذج مخصص", "تطوير خاص", "شريك بحثي",
-                            "بيانات خاصة", "دعم مخصص 24/7"]}
+                   "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
+    "university": {"name": "🏫 باقة الجامعة", "price_yemen": 500, "price_gulf": 2500, "price_global": 5000,
+                   "duration_days": 365, "max_trials": -1,
+                   "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
+    "hospital": {"name": "🏥 باقة المستشفى", "price_yemen": 2000, "price_gulf": 10000, "price_global": 25000,
+                 "duration_days": 365, "max_trials": -1,
+                 "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
+    "pharma": {"name": "💊 باقة شركة الأدوية", "price_yemen": 10000, "price_gulf": 50000, "price_global": 200000,
+               "duration_days": 365, "max_trials": -1,
+               "features": {"ai": True, "csv": True, "pdf": True, "api": True}}
 }
 
 
 def init_user_session():
     defaults = {'user_plan': 'free', 'trials_used': 0,
                 'subscription_start': None, 'subscription_end': None,
-                'show_pricing': False}
+                'show_pricing': False, 'customer_name': None}
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -381,9 +378,41 @@ def show_subscription_status():
             st.rerun()
     else:
         st.sidebar.success(f"**الباقة:** {plan['name']}")
+        if st.session_state.get('customer_name'):
+            st.sidebar.info(f"👤 {st.session_state.customer_name}")
         if st.session_state.subscription_end:
             days_left = max(0, (st.session_state.subscription_end - datetime.now()).days)
             st.sidebar.info(f"**متبقي:** {days_left} يوم")
+
+
+def show_activation_field():
+    """حقل إدخال كود التفعيل"""
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🔑 تفعيل الباقة")
+
+    if st.session_state.user_plan == 'free':
+        code_input = st.sidebar.text_input("أدخل كود التفعيل:", key='code_input')
+
+        if st.sidebar.button("✅ تفعيل", key='activate_btn', use_container_width=True):
+            if code_input:
+                success, result = activate_subscription(code_input.strip().upper())
+                if success:
+                    st.session_state.user_plan = result['plan']
+                    st.session_state.customer_name = result['name']
+                    try:
+                        end = datetime.fromisoformat(result['end_date'].replace('Z', '+00:00'))
+                        st.session_state.subscription_end = end.replace(tzinfo=None)
+                    except:
+                        st.session_state.subscription_end = datetime.now() + timedelta(days=30)
+                    st.sidebar.success(f"✅ مرحباً {result['name']}!")
+                    st.sidebar.balloons()
+                    st.rerun()
+                else:
+                    st.sidebar.error(f"❌ {result}")
+            else:
+                st.sidebar.warning("أدخل الكود أولاً")
+    else:
+        st.sidebar.success("✅ باقتك مفعّلة")
 
 
 def show_pricing_page():
@@ -404,7 +433,6 @@ def show_pricing_page():
         st.markdown("**10 تجارب**")
         st.markdown("✅ محاكاة كاملة")
         st.markdown("❌ مكونات AI")
-        st.markdown("❌ تقارير")
 
     with c2:
         st.markdown("### 📆 شهري")
@@ -424,12 +452,12 @@ def show_pricing_page():
     st.markdown("---")
     st.markdown("## 🏢 الباقات المؤسسية")
     c1, c2, c3 = st.columns(3)
-    for i, (key, plan) in enumerate(ENTERPRISE_PLANS.items()):
+    for i, key in enumerate(["university", "hospital", "pharma"]):
+        plan = PLANS[key]
         with [c1, c2, c3][i]:
             st.markdown(f"### {plan['name']}")
             st.markdown(f"# ${plan[f'price_{region_key}']:,}")
-            for feature in plan['features']:
-                st.markdown(f"✅ {feature}")
+            st.markdown("**سنوياً**")
 
     st.markdown("---")
     st.markdown("## 💳 طرق الدفع")
@@ -458,15 +486,181 @@ def show_pricing_page():
     1. اختر الباقة
     2. حوّل المبلغ إلى: **779193805**
     3. أرسل الإيصال على: **ghythanbdalghny97@gmail.com**
-    4. تفعيل الباقة خلال 24 ساعة
+    4. سيصلك كود التفعيل خلال 24 ساعة
     """)
 
+
+# ============================================================
+#              🔧 لوحة تحكم المسؤول
+# ============================================================
+
+def admin_dashboard():
+    """لوحة تحكم المسؤول - إدارة العملاء"""
+    st.header("🔧 لوحة تحكم المسؤول")
+    st.markdown("*إدارة العملاء والاشتراكات*")
     st.markdown("---")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("#### 📱 واتساب\n[اضغط للمحادثة](https://wa.me/967779193805)")
-    with c2:
-        st.markdown("#### 📧 البريد\nghythanbdalghny97@gmail.com")
+
+    # كلمة المرور
+    if 'admin_auth' not in st.session_state:
+        st.session_state.admin_auth = False
+
+    if not st.session_state.admin_auth:
+        st.subheader("🔐 تسجيل دخول المسؤول")
+        pwd = st.text_input("كلمة المرور:", type="password", key='admin_pwd')
+        if st.button("دخول", type="primary"):
+            correct_pwd = st.secrets.get("ADMIN_PASSWORD", "Hydromem2026Strong")
+            if pwd == correct_pwd:
+                st.session_state.admin_auth = True
+                st.rerun()
+            else:
+                st.error("❌ كلمة مرور خاطئة")
+        return
+
+    # إحصائيات
+    stats = get_stats()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("👥 إجمالي العملاء", stats['total'])
+    c2.metric("✅ نشط", stats['active'])
+    c3.metric("⚠️ قريب الانتهاء", stats['expiring'])
+    c4.metric("💰 الإيرادات", f"${stats['revenue']:.2f}")
+
+    if not stats['connected']:
+        st.error("⚠️ لم يتم الاتصال بقاعدة البيانات. تحقق من Secrets.")
+
+    st.markdown("---")
+
+    tab1, tab2, tab3 = st.tabs(["➕ إضافة عميل", "📋 قائمة العملاء", "⚠️ تذكيرات"])
+
+    # === Tab 1: إضافة عميل ===
+    with tab1:
+        st.subheader("➕ إضافة عميل جديد")
+        st.info("📌 استلم إشعار الحوالة من الجاد، ثم أدخل البيانات هنا.")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            name = st.text_input("اسم العميل *", key='new_name')
+            phone = st.text_input("رقم الجوال *", key='new_phone', placeholder="+967771234567")
+        with c2:
+            email = st.text_input("البريد الإلكتروني (اختياري)", key='new_email')
+            plan = st.selectbox("الباقة *", list(PLANS.keys())[1:], key='new_plan',
+                                format_func=lambda x: PLANS[x]['name'])
+            amount = st.number_input("المبلغ المستلم (USD) *", min_value=0.0,
+                                     step=0.01, value=29.99, key='new_amount')
+
+        notes = st.text_area("ملاحظات (اختياري)", key='new_notes')
+
+        if st.button("✅ إضافة العميل", type="primary", use_container_width=True):
+            if name and phone:
+                success, result = add_customer(name, phone, email, plan, amount, notes)
+                if success:
+                    st.success(f"✅ تم إضافة العميل بنجاح!")
+                    st.balloons()
+
+                    st.markdown("---")
+                    st.subheader("🎁 الكود الجاهز")
+                    st.code(result['code'], language=None)
+
+                    st.markdown("### 📋 انسخ الرسالة وأرسلها للعميل:")
+                    msg = f"""مرحباً {result['name']} 🌟
+
+شكراً لاشتراكك في HYDROMEM Dynamics AI
+
+🎁 كود التفعيل الخاص بك:
+{result['code']}
+
+📌 طريقة الاستخدام:
+1. افتح: https://hydromem-dynamics.streamlit.app
+2. اذهب إلى الشريط الجانبي
+3. أدخل الكود في "🔑 تفعيل الباقة"
+4. اضغط "تفعيل"
+
+⏱️ صالح لمدة: {result['days']} يوم
+
+📞 للاستفسارات: 779193805"""
+                    st.text_area("الرسالة:", msg, height=250)
+
+                    # رابط واتساب
+                    wa_phone = phone.replace('+', '').replace(' ', '').replace('-', '')
+                    wa_link = f"https://wa.me/{wa_phone}?text={msg.replace(chr(10), '%0A').replace(' ', '%20')}"
+                    st.markdown(f"[📱 إرسال الكود عبر واتساب]({wa_link})")
+                else:
+                    st.error(f"❌ خطأ: {result}")
+            else:
+                st.warning("⚠️ أدخل الاسم ورقم الجوال على الأقل")
+
+    # === Tab 2: قائمة العملاء ===
+    with tab2:
+        st.subheader("📋 قائمة العملاء")
+        customers = get_all_customers()
+
+        if customers:
+            for c in customers:
+                try:
+                    end = datetime.fromisoformat(c['end_date'].replace('Z', '+00:00'))
+                    days_left = (end.replace(tzinfo=None) - datetime.now()).days
+                except:
+                    days_left = 0
+
+                status_icon = "🟢" if c['status'] == 'active' and days_left > 0 else "🔴"
+                with st.expander(f"{status_icon} {c['name']} - {PLANS.get(c['plan'], {}).get('name', c['plan'])}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**📞 الجوال:** {c['phone']}")
+                        st.write(f"**📧 البريد:** {c.get('email', '—')}")
+                        st.write(f"**💰 المبلغ:** ${c.get('amount', 0)}")
+                    with col2:
+                        st.write(f"**🎫 الكود:** `{c['activation_code']}`")
+                        st.write(f"**⏱️ المتبقي:** {days_left} يوم")
+                        st.write(f"**📅 الحالة:** {c['status']}")
+
+                    if st.button(f"🗑️ حذف", key=f"del_{c['id']}"):
+                        if delete_customer(c['id']):
+                            st.success("تم الحذف")
+                            st.rerun()
+        else:
+            st.info("لا يوجد عملاء بعد")
+
+    # === Tab 3: التذكيرات ===
+    with tab3:
+        st.subheader("⚠️ العملاء الذين ينتهي اشتراكهم قريباً")
+        expiring = get_expiring_customers(7)
+
+        if expiring:
+            for c in expiring:
+                try:
+                    end = datetime.fromisoformat(c['end_date'].replace('Z', '+00:00'))
+                    days_left = (end.replace(tzinfo=None) - datetime.now()).days
+                except:
+                    days_left = 0
+
+                with st.expander(f"⚠️ {c['name']} - متبقي {days_left} يوم"):
+                    st.write(f"📞 {c['phone']}")
+                    st.write(f"الباقة: {PLANS.get(c['plan'], {}).get('name', c['plan'])}")
+
+                    reminder = f"""مرحباً {c['name']} 🌟
+
+اشتراكك في HYDROMEM Dynamics AI سينتهي خلال {days_left} أيام.
+
+للتجديد، حوّل المبلغ إلى:
+🏦 الجاد للصرافة
+👤 عبدالغني صالح محسن محمد غيثان
+🔢 رقم الحساب: 2312718
+
+بعد التحويل، أرسل الإيصال على:
+📱 779193805
+
+شكراً لثقتك 🤝"""
+                    wa_phone = c['phone'].replace('+', '').replace(' ', '').replace('-', '')
+                    wa_link = f"https://wa.me/{wa_phone}?text={reminder.replace(chr(10), '%0A').replace(' ', '%20')}"
+                    st.markdown(f"[📱 إرسال تذكير]({wa_link})")
+        else:
+            st.success("✅ لا يوجد عملاء ينتهي اشتراكهم خلال 7 أيام")
+
+    st.markdown("---")
+    if st.button("🚪 تسجيل خروج المسؤول"):
+        st.session_state.admin_auth = False
+        st.rerun()
 
 
 # ============================================================
@@ -480,17 +674,24 @@ st.markdown("### منصة ذكاء حاسوبي للمحاكاة وتحليل ا
 st.markdown("---")
 
 app = st.sidebar.radio("🔬 اختر التطبيق:", [
-    "🏠 الرئيسية", "💎 باقات الاشتراك", "⚙️ النموذج الديناميكي العام",
-    "🦵 خشونة الركبة", "🦴 التئام العظام", "💧 الأقراص الفقرية",
-    "🩹 التئام الجروح", "🧠 مكونات الذكاء الاصطناعي"
+    "🏠 الرئيسية",
+    "💎 باقات الاشتراك",
+    "🔧 لوحة التحكم",
+    "⚙️ النموذج الديناميكي العام",
+    "🦵 خشونة الركبة",
+    "🦴 التئام العظام",
+    "💧 الأقراص الفقرية",
+    "🩹 التئام الجروح",
+    "🧠 مكونات الذكاء الاصطناعي"
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 11.0")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 12.0")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
 show_subscription_status()
+show_activation_field()
 
 
 # ============================================================
@@ -506,10 +707,10 @@ if app == "🏠 الرئيسية":
 
         ### 🔬 التطبيقات
         - ⚙️ النموذج الديناميكي العام
-        - 🦵 خشونة الركبة (10-20 سنة)
-        - 🦴 التئام العظام (12-24 أسبوعاً)
-        - 💧 الأقراص الفقرية (24 ساعة)
-        - 🩹 التئام الجروح (8-16 أسبوعاً)
+        - 🦵 خشونة الركبة
+        - 🦴 التئام العظام
+        - 💧 الأقراص الفقرية
+        - 🩹 التئام الجروح
         """)
     with c2:
         st.markdown("""
@@ -518,8 +719,8 @@ if app == "🏠 الرئيسية":
         - المحاكاة العددية (odeint)
         - تحليل الاستقرار (Jacobian)
         - الذكاء الاصطناعي (MLP + RF)
+        - قاعدة بيانات Supabase
         - تقارير طبية تلقائية
-        - تطبيق PWA للهاتف
         """)
         st.success("✅ منصة كاملة جاهزة")
 
@@ -529,6 +730,13 @@ if app == "🏠 الرئيسية":
 # ============================================================
 elif app == "💎 باقات الاشتراك":
     show_pricing_page()
+
+
+# ============================================================
+#              لوحة تحكم المسؤول
+# ============================================================
+elif app == "🔧 لوحة التحكم":
+    admin_dashboard()
 
 
 # ============================================================
@@ -556,8 +764,7 @@ elif app == "⚙️ النموذج الديناميكي العام":
         ax.plot(t, s[:,1], 'r-', lw=2, label='Θ')
         add_values_on_plot(ax, t, s[:,0], num_points=6, color='blue', fmt='{:.3f}')
         add_values_on_plot(ax, t, s[:,1], num_points=6, color='red', fmt='{:.3f}')
-        ax.set_xlabel('الزمن'); ax.set_ylabel('القيمة')
-        ax.legend(); ax.grid(alpha=0.3)
+        ax.set_xlabel('الزمن'); ax.legend(); ax.grid(alpha=0.3)
         st.pyplot(fig)
 
     c1, c2, c3, c4 = st.columns(4)
@@ -613,40 +820,20 @@ elif app == "🦵 خشونة الركبة":
     d2.metric("⏱️ إلى KL-3", f"{time_kl3:.1f} سنة" if time_kl3 else "لا يصل")
     d3.metric("⏱️ إلى KL-4", f"{time_kl4:.1f} سنة" if time_kl4 else "لا يصل")
 
-    # التقرير
-    results = {
-        "الصلابة النهائية": f"{s[-1,1]:.4f}",
-        "مرحلة KL": classify_kl(s[-1,1]),
-        "MMP النهائي": f"{s[-1,0]:.4f}",
-        "عدد السنوات": f"{yrs}",
-    }
+    results = {"الصلابة النهائية": f"{s[-1,1]:.4f}", "مرحلة KL": classify_kl(s[-1,1]),
+               "MMP النهائي": f"{s[-1,0]:.4f}", "عدد السنوات": f"{yrs}"}
     timeline = []
-    if time_kl2: timeline.append(f"بعد {time_kl2:.1f} سنة: KL-2 (خفيف)")
-    if time_kl3: timeline.append(f"بعد {time_kl3:.1f} سنة: KL-3 (متوسط)")
-    if time_kl4: timeline.append(f"بعد {time_kl4:.1f} سنة: KL-4 (شديد)")
+    if time_kl2: timeline.append(f"بعد {time_kl2:.1f} سنة: KL-2")
+    if time_kl3: timeline.append(f"بعد {time_kl3:.1f} سنة: KL-3")
+    if time_kl4: timeline.append(f"بعد {time_kl4:.1f} سنة: KL-4")
 
     stage = classify_kl(s[-1,1])
     if "KL-4" in stage:
-        rec = {
-            "نمط الحياة": ["تقليل الوزن 5-10 كغ", "تمارين منخفضة التأثير", "تجنب الجري والقفز"],
-            "المتابعة الطبية": ["استشارة جراح عظام خلال 3 أشهر", "أشعة سينية كل 6 أشهر"],
-            "توقيت التدخل": ["تقييم جراحي عاجل", "فحص حقن الركبة"],
-        }
-    elif "KL-3" in stage:
-        rec = {
-            "نمط الحياة": ["تمارين علاج طبيعي", "استخدام عكاز عند الحاجة"],
-            "المتابعة الطبية": ["زيارة طبيب عظام كل 4 أشهر", "علاج طبيعي منتظم"],
-        }
-    elif "KL-2" in stage:
-        rec = {
-            "نمط الحياة": ["تمارين وقائية", "تقليل الوزن", "تناول مكملات"],
-            "المتابعة الطبية": ["زيارة طبيب كل 6 أشهر"],
-        }
+        rec = {"نمط الحياة": ["تقليل الوزن", "تمارين منخفضة التأثير"],
+               "المتابعة": ["استشارة جراح عظام"]}
     else:
-        rec = {
-            "نمط الحياة": ["تمارين وقائية للركبة", "وزن صحي", "فيتامين D و C"],
-            "المتابعة الطبية": ["زيارة طبيب سنوياً", "أشعة سينية سنوية"],
-        }
+        rec = {"نمط الحياة": ["تمارين وقائية", "وزن صحي"],
+               "المتابعة": ["زيارة طبيب سنوياً"]}
     generate_report("خشونة الركبة", results, timeline, rec)
     use_trial()
 
@@ -674,8 +861,7 @@ elif app == "🦴 التئام العظام":
         ax.plot(t/7, s[:,2], 'r-', lw=2, label='الصلابة')
         add_values_on_plot(ax, t/7, s[:,0], num_points=5, color='green', fmt='{:.2f}')
         add_values_on_plot(ax, t/7, s[:,2], num_points=5, color='red', fmt='{:.2f}')
-        ax.set_xlabel('الأسابيع'); ax.set_ylabel('القيمة')
-        ax.legend(); ax.grid(alpha=0.3)
+        ax.set_xlabel('الأسابيع'); ax.legend(); ax.grid(alpha=0.3)
         st.pyplot(fig)
 
     C = s[-1,2]
@@ -694,31 +880,15 @@ elif app == "🦴 التئام العظام":
     d2.metric("⏱️ لـ 90% التئام", f"{t_90:.1f} أسبوع" if t_90 else "لا يصل")
     d3.metric("⏱️ للالتئام الكامل", f"{t_100:.1f} أسبوع" if t_100 else "لا يصل")
 
-    results = {
-        "الصلابة النهائية": f"{C:.4f}",
-        "نسبة الحمل": f"{(C/Cm)*100:.2f}%",
-        "المرحلة": healing_stage(C, Cm),
-    }
+    results = {"الصلابة النهائية": f"{C:.4f}", "نسبة الحمل": f"{(C/Cm)*100:.2f}%",
+               "المرحلة": healing_stage(C, Cm)}
     timeline = []
-    if t_50: timeline.append(f"الأسبوع {t_50:.1f}: التئام 50%")
-    if t_90: timeline.append(f"الأسبوع {t_90:.1f}: التئام 90%")
+    if t_50: timeline.append(f"الأسبوع {t_50:.1f}: 50%")
+    if t_90: timeline.append(f"الأسبوع {t_90:.1f}: 90%")
     if t_100: timeline.append(f"الأسبوع {t_100:.1f}: التئام كامل")
 
-    if C/Cm > 0.8:
-        rec = {
-            "الحالة": ["الالتئام ممتاز"],
-            "المتابعة": ["زيارة طبيب العظام بعد 4 أسابيع", "أشعة تأكيدية"],
-        }
-    elif C/Cm > 0.5:
-        rec = {
-            "الحالة": ["الالتئام في منتصف الطريق"],
-            "المتابعة": ["زيارة طبيب كل 3 أسابيع", "الالتزام بالراحة"],
-        }
-    else:
-        rec = {
-            "الحالة": ["الالتئام بطيء"],
-            "المتابعة": ["استشارة عاجلة لطبيب عظام", "فحص أسباب تأخر الالتئام"],
-        }
+    rec = {"الحالة": ["الالتئام يسير بشكل جيد" if C/Cm > 0.5 else "يحتاج متابعة"],
+           "المتابعة": ["زيارة طبيب العظام"]}
     generate_report("التئام العظام", results, timeline, rec)
     use_trial()
 
@@ -747,7 +917,6 @@ elif app == "💧 الأقراص الفقرية":
         ax2 = ax1.twinx()
         ax2.plot(t, s[:,1], 'g-', lw=2, label='الارتفاع')
         ax2.plot(t, s[:,2], 'r-', lw=2, label='الضغط')
-        ax2.set_ylabel('الارتفاع / الضغط')
         ax2.legend(loc='upper left')
         add_values_on_plot(ax1, t, s[:,0]*100, num_points=6, color='darkblue', fmt='{:.1f}%')
         add_values_on_plot(ax2, t, s[:,1], num_points=4, color='darkgreen', fmt='{:.3f}')
@@ -769,18 +938,11 @@ elif app == "💧 الأقراص الفقرية":
     d2.metric("⏱️ لـ 80% ماء", f"{t_80:.1f} ساعة" if t_80 else "لا يصل")
     d3.metric("⏱️ ذروة الماء", f"{t_peak:.1f} ساعة")
 
-    results = {
-        "الماء النهائي": f"{s[-1,0]*100:.2f}%",
-        "الارتفاع": f"{s[-1,1]:.4f}",
-        "الضغط": f"{s[-1,2]:.4f}",
-    }
+    results = {"الماء النهائي": f"{s[-1,0]*100:.2f}%", "الارتفاع": f"{s[-1,1]:.4f}",
+               "الضغط": f"{s[-1,2]:.4f}"}
     timeline = [f"ذروة الماء: {t_peak:.1f} ساعة"]
-    if t_80: timeline.append(f"الوصول لـ 80% ماء: {t_80:.1f} ساعة")
-
-    rec = {
-        "نمط الحياة": ["تجنب الجلوس الطويل", "تمارين تمدد للظهر", "الراحة الكافية"],
-        "المتابعة": ["زيارة طبيب عمود فقري عند استمرار الألم", "تصوير MRI عند الحاجة"],
-    }
+    rec = {"نمط الحياة": ["تجنب الجلوس الطويل", "تمارين تمدد"],
+           "المتابعة": ["طبيب عمود فقري عند استمرار الألم"]}
     generate_report("الأقراص الفقرية", results, timeline, rec)
     use_trial()
 
@@ -842,29 +1004,19 @@ elif app == "🩹 التئام الجروح":
     d2.metric("⏱️ لـ 90% تغطية", f"{t_90:.1f} أسبوع" if t_90 else "لا يصل")
     d3.metric("⏱️ للالتئام الكامل", f"{t_95:.1f} أسبوع" if t_95 else "لا يصل")
 
-    results = {
-        "التغطية النهائية": f"{max(s[-1,0],0)*100:.2f}%",
-        "الكولاجين": f"{max(s[-1,2],0)*100:.2f}%",
-        "الالتهاب": f"{s[-1,3]:.4f}",
-        "البكتيريا": f"{s[-1,4]:.4f}",
-        "السيناريو": scenario,
-    }
+    results = {"التغطية": f"{max(s[-1,0],0)*100:.2f}%",
+               "الكولاجين": f"{max(s[-1,2],0)*100:.2f}%",
+               "السيناريو": scenario}
     timeline = []
-    if t_50: timeline.append(f"الأسبوع {t_50:.1f}: تغطية 50%")
-    if t_90: timeline.append(f"الأسبوع {t_90:.1f}: تغطية 90%")
+    if t_50: timeline.append(f"الأسبوع {t_50:.1f}: 50%")
+    if t_90: timeline.append(f"الأسبوع {t_90:.1f}: 90%")
 
     if "Infected" in scenario:
-        rec = {
-            "الإجراء العاجل": ["تطهير الجرح يومياً", "مضادات حيوية حسب وصف الطبيب"],
-            "المتابعة": ["زيارة طبيب يومياً", "تغيير الضمادة مرتين يومياً"],
-            "التحذيرات": ["راقب علامات انتشار العدوى", "لا تهمل ارتفاع الحرارة"],
-        }
+        rec = {"الإجراء العاجل": ["تطهير الجرح يومياً", "مضادات حيوية"],
+               "المتابعة": ["زيارة طبيب يومياً"]}
     else:
-        rec = {
-            "العناية اليومية": ["تنظيف الجرح بمحلول مطهر", "تغيير الضمادة يومياً"],
-            "التغذية": ["تناول بروتين كافٍ", "فيتامين C لتسريع الالتئام"],
-            "المتابعة": ["زيارة الطبيب عند عدم التحسن بعد أسبوع"],
-        }
+        rec = {"العناية": ["تنظيف الجرح", "تغيير الضمادة"],
+               "التغذية": ["بروتين", "فيتامين C"]}
     generate_report("التئام الجروح", results, timeline, rec)
     use_trial()
 
@@ -877,9 +1029,9 @@ elif app == "🧠 مكونات الذكاء الاصطناعي":
         st.error("🔒 **هذه الميزة متاحة فقط في الباقات المدفوعة**")
         st.warning("""
         ### 💎 مكونات AI المحمية:
-        - ⚡ Surrogate Model — تنبؤ سريع 50×
-        - 🎯 Stability Classifier — دقة 99%
-        - 📊 Stiffness Regressor — R² = 0.99
+        - ⚡ Surrogate Model
+        - 🎯 Stability Classifier
+        - 📊 Stiffness Regressor
         """)
         if st.button("💎 عرض الباقات والترقية", type="primary"):
             st.session_state.show_pricing = True
@@ -926,11 +1078,11 @@ st.markdown("### 📞 للتواصل")
 c1, c2, c3 = st.columns(3)
 c1.markdown("📧 **ghythanbdalghny97@gmail.com**")
 c2.markdown("📱 **+967 779193805**")
-c3.markdown("💳 **عبد الغني غيثان**")
+c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 11.0 | "
-    "5 تطبيقات + 3 مكونات AI + تقارير طبية | TRL 3 | "
+    "**HYDROMEM Dynamics AI** — الإصدار 12.0 | "
+    "5 تطبيقات + 3 مكونات AI + تقارير + Supabase | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
-        )
+)
