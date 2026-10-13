@@ -36,7 +36,7 @@ def init_gemini():
             st.warning("⚠️ لم يتم العثور على مفتاح GEMINI_API_KEY في إعدادات Streamlit Secrets. يرجى إضافته.")
             return None
         
-        # تهيئة العميل بشكل صحيح (بدون http_options لتجنب مشاكل المصادقة)
+        # تهيئة العميل بشكل صحيح
         client = genai.Client(api_key=api_key)
         return client
     except Exception as e:
@@ -84,11 +84,12 @@ def call_gemini(client, prompt, image=None):
     """استدعاء Gemini API بالطريقة الصحيحة"""
     contents = [prompt, image] if image else prompt
     
-    # قائمة النماذج الصحيحة والمتاحة حالياً
+    # ✅ قائمة النماذج المحدثة والصحيحة (تم إزالة gemini-pro القديم)
     models_to_try = [
         'gemini-1.5-flash',
         'gemini-1.5-pro',
-        'gemini-pro'
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro-latest'
     ]
     
     last_error = None
