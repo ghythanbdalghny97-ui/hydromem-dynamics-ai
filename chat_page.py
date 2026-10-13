@@ -84,12 +84,12 @@ def call_gemini(client, prompt, image=None):
     """استدعاء Gemini API بالطريقة الصحيحة"""
     contents = [prompt, image] if image else prompt
     
-    # ✅ قائمة النماذج المحدثة والصحيحة (تم إزالة gemini-pro القديم)
+    # ✅ تم تحديث أسماء النماذج لتتناسب مع الإصدارات الحديثة
     models_to_try = [
         'gemini-1.5-flash',
-        'gemini-1.5-pro',
-        'gemini-1.5-flash-latest',
-        'gemini-1.5-pro-latest'
+        'gemini-2.0-flash',
+        'gemini-2.5-flash',
+        'gemini-1.5-pro'
     ]
     
     last_error = None
