@@ -11,7 +11,7 @@ from PIL import Image
 import io
 
 try:
-    import google.generativeai as genai
+    from google import genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -32,28 +32,8 @@ def init_gemini():
         api_key = st.secrets.get("GEMINI_API_KEY", "")
         if not api_key:
             return None
-        genai.configure(api_key=api_key)
-        
-        # جرب كل النماذج المتاحة بالترتيب
-        models_to_try = [
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-002',
-            'gemini-1.5-flash-001',
-            'gemini-1.5-pro',
-            'gemini-1.5-pro-002',
-            'gemini-1.0-pro',
-            'gemini-pro',
-        ]
-        
-        for model_name in models_to_try:
-            try:
-                m = genai.GenerativeModel(model_name)
-                test = m.generate_content("test")
-                return m
-            except Exception:
-                continue
-        
-        return None
+        client = genai.Client(api_key=api_key)
+        return client
     except Exception:
         return None
 
@@ -94,14 +74,38 @@ def get_system_prompt():
 """
 
 
+def call_gemini(client, prompt, image=None):
+    """استدعاء Gemini API بالطريقة الصحيحة"""
+    try:
+        if image:
+            contents = [prompt, image]
+        else:
+            contents = prompt
+        
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=contents
+        )
+        return response.text
+    except Exception as e:
+        try:
+            response = client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=contents
+            )
+            return response.text
+        except Exception as e2:
+            raise Exception(f"فشل الاتصال: {str(e2)}")
+
+
 def handle_text_input(prompt):
     with st.chat_message("user"):
         st.markdown(prompt)
     st.session_state.chat_history.append({'role': 'user', 'content': prompt})
     
-    model = init_gemini()
+    client = init_gemini()
     with st.chat_message("assistant"):
-        if not model:
+        if not client:
             st.error("⚠️ خدمة AI غير متاحة. تحقق من GEMINI_API_KEY في Secrets.")
             return
         
@@ -117,14 +121,14 @@ def handle_text_input(prompt):
         try:
             with st.spinner("🤖 جاري التحليل..."):
                 full_prompt = f"{get_system_prompt()}\n\n{extra}\n\nسؤال: {prompt}"
-                response = model.generate_content(full_prompt)
-                st.markdown(response.text)
+                response_text = call_gemini(client, full_prompt)
+                st.markdown(response_text)
                 st.session_state.chat_history.append({
-                    'role': 'assistant', 'content': response.text
+                    'role': 'assistant', 'content': response_text
                 })
                 st.download_button(
                     label="📥 تحميل الرد",
-                    data=response.text.encode('utf-8'),
+                    data=response_text.encode('utf-8'),
                     file_name=f"HYDROMEM_Response_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                     mime="text/plain",
                     key=f"dl_{datetime.now().timestamp()}"
@@ -142,25 +146,26 @@ def handle_image_input(uploaded_image):
         'role': 'user', 'content': f"📷 صورة: {uploaded_image.name}", 'image': image
     })
     
-    model = init_gemini()
+    client = init_gemini()
     with st.chat_message("assistant"):
-        if not model:
+        if not client:
             st.error("⚠️ خدمة AI غير متاحة")
             return
         try:
             with st.spinner("🔬 جاري تحليل الصورة..."):
-                response = model.generate_content([
+                response_text = call_gemini(
+                    client,
                     "حلل هذه الصورة بالتفصيل بالعربية. إذا كانت طبية: حدد المنطقة وصف ما تراه. إذا كانت معادلة: اقرأها وحلها. إذا كانت رسم بياني: صف البيانات.",
                     image
-                ])
+                )
                 st.markdown("### 🔬 تحليل الصورة")
-                st.markdown(response.text)
+                st.markdown(response_text)
                 st.session_state.chat_history.append({
-                    'role': 'assistant', 'content': response.text
+                    'role': 'assistant', 'content': response_text
                 })
                 st.download_button(
                     label="📥 تحميل التحليل",
-                    data=response.text.encode('utf-8'),
+                    data=response_text.encode('utf-8'),
                     file_name=f"HYDROMEM_Image_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                     mime="text/plain",
                     key=f"img_dl_{datetime.now().timestamp()}"
@@ -182,14 +187,14 @@ def handle_file_input(uploaded_file):
         'role': 'user', 'content': f"📎 ملف: {uploaded_file.name}"
     })
     
-    model = init_gemini()
+    client = init_gemini()
     with st.chat_message("assistant"):
-        if not model:
+        if not client:
             st.error("⚠️ خدمة AI غير متاحة")
             return
         try:
             with st.spinner("📊 جاري تحليل الملف..."):
-                response = model.generate_content(f"""
+                prompt = f"""
 {get_system_prompt()}
 
 حلل هذا الملف:
@@ -197,15 +202,16 @@ def handle_file_input(uploaded_file):
 المحتوى: {content[:5000]}
 
 قدم: 1) ملخص 2) البيانات الرئيسية 3) التحليل الإحصائي 4) التفسير 5) التوصيات
-""")
+"""
+                response_text = call_gemini(client, prompt)
                 st.markdown("### 📊 تحليل الملف")
-                st.markdown(response.text)
+                st.markdown(response_text)
                 st.session_state.chat_history.append({
-                    'role': 'assistant', 'content': response.text
+                    'role': 'assistant', 'content': response_text
                 })
                 st.download_button(
                     label="📥 تحميل التحليل",
-                    data=response.text.encode('utf-8'),
+                    data=response_text.encode('utf-8'),
                     file_name=f"HYDROMEM_File_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                     mime="text/plain",
                     key=f"file_dl_{datetime.now().timestamp()}"
