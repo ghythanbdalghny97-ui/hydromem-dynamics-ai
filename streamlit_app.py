@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v12.0
+HYDROMEM Dynamics AI v13.0
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 12.0 — Full Platform with Supabase Integration
+Version 13.0 — Full Platform with Chat AI
 ============================================================
 """
 
@@ -28,12 +28,12 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-# Supabase imports
 from supabase_utils import (
     init_supabase, add_customer, get_all_customers,
     get_expiring_customers, activate_subscription,
     update_customer_status, delete_customer, get_stats
 )
+from chat_page import chat_page
 
 st.set_page_config(
     page_title="HYDROMEM Dynamics AI",
@@ -42,7 +42,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize Supabase
 try:
     init_supabase(
         st.secrets.get("SUPABASE_URL", ""),
@@ -51,13 +50,10 @@ try:
 except Exception:
     pass
 
-# PWA Configuration
 st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="HYDROMEM">
 <meta name="theme-color" content="#667eea">
 <meta name="application-name" content="HYDROMEM Dynamics AI">
 <link rel="manifest" href="https://raw.githubusercontent.com/ghythanbdalghny97-ui/hydromem-dynamics-ai/main/manifest.json">
@@ -75,11 +71,10 @@ st.markdown("""
 
 
 # ============================================================
-#              دوال مساعدة (Helpers)
+#              دوال مساعدة
 # ============================================================
 
 def add_values_on_plot(ax, x, y, num_points=5, color='black', fmt='{:.3f}'):
-    """إضافة قيم رقمية على الرسم البياني"""
     if len(x) == 0: return
     indices = np.linspace(0, len(x)-1, num_points, dtype=int)
     for i in indices:
@@ -150,14 +145,13 @@ def wound(y, t, p):
 
 
 # ============================================================
-#              دالة إنشاء التقرير الطبي
+#              دالة التقرير الطبي
 # ============================================================
 
 def generate_report(app_name, results, timeline, recommendations):
     st.markdown("---")
     st.subheader("📄 التقرير الطبي التلقائي")
-
-    report_html = f"""
+    st.markdown(f"""
     <div style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
                 padding: 25px; border-radius: 15px; margin: 15px 0; direction: rtl;">
         <h2 style="color: #333; text-align: center;">🧬 تقرير HYDROMEM Dynamics AI</h2>
@@ -168,31 +162,25 @@ def generate_report(app_name, results, timeline, recommendations):
         <hr>
         <h3>📊 التطبيق: {app_name}</h3>
     </div>
-    """
-    st.markdown(report_html, unsafe_allow_html=True)
-
+    """, unsafe_allow_html=True)
     st.markdown("### 📊 نتائج المحاكاة")
     for key, value in results.items():
         st.markdown(f"- **{key}:** {value}")
-
     if timeline:
         st.markdown("### ⏱️ الجدول الزمني المتوقع")
         for item in timeline:
             st.markdown(f"- {item}")
-
     if recommendations:
         st.markdown("### 💡 التوصيات الإرشادية")
         for category, items in recommendations.items():
             st.markdown(f"**{category}:**")
             for item in items:
                 st.markdown(f"  - {item}")
-
     st.error("""
     ⚠️ **إخلاء مسؤولية طبية:**
     هذا التقرير لأغراض **بحثية وتعليمية فقط**.
     لا يُعدّ تشخيصاً طبياً ولا بديلاً عن استشارة طبيب مختص.
     """)
-
     txt = f"HYDROMEM Dynamics AI - Medical Report\n"
     txt += "=" * 50 + "\n"
     txt += f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
@@ -211,7 +199,6 @@ def generate_report(app_name, results, timeline, recommendations):
             for it in items:
                 txt += f"    - {it}\n"
     txt += "\nContact: ghythanbdalghny97@gmail.com | +967 779193805\n"
-
     st.download_button(
         label="📥 تحميل التقرير (TXT)",
         data=txt.encode('utf-8'),
@@ -298,35 +285,35 @@ def train_regressor():
 
 
 # ============================================================
-#              نظام التسعير
+#              نظام التسعير (الأسعار المحدثة)
 # ============================================================
 
 PLANS = {
     "free": {"name": "🆓 مجاني", "price_yemen": 0, "price_gulf": 0, "price_global": 0,
              "duration_days": 999999, "max_trials": 10,
              "features": {"ai": False, "csv": False, "pdf": False, "api": False}},
-    "weekly": {"name": "📅 أسبوعي", "price_yemen": 2, "price_gulf": 9.99, "price_global": 19.99,
+    "weekly": {"name": "📅 أسبوعي", "price_yemen": 3, "price_gulf": 14.99, "price_global": 24.99,
                "duration_days": 7, "max_trials": -1,
                "features": {"ai": True, "csv": True, "pdf": False, "api": False}},
-    "monthly": {"name": "📆 شهري", "price_yemen": 7, "price_gulf": 29.99, "price_global": 49.99,
+    "monthly": {"name": "📆 شهري", "price_yemen": 10, "price_gulf": 39.99, "price_global": 59.99,
                 "duration_days": 30, "max_trials": -1,
                 "features": {"ai": True, "csv": True, "pdf": True, "api": False}},
-    "yearly": {"name": "⭐ سنوي", "price_yemen": 50, "price_gulf": 199, "price_global": 399,
+    "yearly": {"name": "⭐ سنوي", "price_yemen": 80, "price_gulf": 299, "price_global": 499,
                "duration_days": 365, "max_trials": -1,
                "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "pro_monthly": {"name": "🩺 احترافي شهري", "price_yemen": 15, "price_gulf": 59, "price_global": 99,
+    "pro_monthly": {"name": "🩺 احترافي شهري", "price_yemen": 20, "price_gulf": 79, "price_global": 129,
                     "duration_days": 30, "max_trials": -1,
                     "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "pro_yearly": {"name": "🏆 احترافي سنوي", "price_yemen": 120, "price_gulf": 499, "price_global": 799,
+    "pro_yearly": {"name": "🏆 احترافي سنوي", "price_yemen": 150, "price_gulf": 599, "price_global": 999,
                    "duration_days": 365, "max_trials": -1,
                    "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "university": {"name": "🏫 باقة الجامعة", "price_yemen": 500, "price_gulf": 2500, "price_global": 5000,
+    "university": {"name": "🏫 باقة الجامعة", "price_yemen": 800, "price_gulf": 3500, "price_global": 7000,
                    "duration_days": 365, "max_trials": -1,
                    "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "hospital": {"name": "🏥 باقة المستشفى", "price_yemen": 2000, "price_gulf": 10000, "price_global": 25000,
+    "hospital": {"name": "🏥 باقة المستشفى", "price_yemen": 3000, "price_gulf": 15000, "price_global": 35000,
                  "duration_days": 365, "max_trials": -1,
                  "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "pharma": {"name": "💊 باقة شركة الأدوية", "price_yemen": 10000, "price_gulf": 50000, "price_global": 200000,
+    "pharma": {"name": "💊 باقة شركة الأدوية", "price_yemen": 15000, "price_gulf": 75000, "price_global": 300000,
                "duration_days": 365, "max_trials": -1,
                "features": {"ai": True, "csv": True, "pdf": True, "api": True}}
 }
@@ -369,7 +356,6 @@ def show_subscription_status():
     plan = get_current_plan()
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 💳 حالة الاشتراك")
-
     if st.session_state.user_plan == 'free':
         st.sidebar.warning(f"**الباقة:** {plan['name']}")
         st.sidebar.info(f"**التجارب:** {remaining_trials()} / 10")
@@ -386,13 +372,10 @@ def show_subscription_status():
 
 
 def show_activation_field():
-    """حقل إدخال كود التفعيل"""
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔑 تفعيل الباقة")
-
     if st.session_state.user_plan == 'free':
         code_input = st.sidebar.text_input("أدخل كود التفعيل:", key='code_input')
-
         if st.sidebar.button("✅ تفعيل", key='activate_btn', use_container_width=True):
             if code_input:
                 success, result = activate_subscription(code_input.strip().upper())
@@ -418,7 +401,6 @@ def show_activation_field():
 def show_pricing_page():
     st.header("💎 باقات الاشتراك الاحترافية")
     st.markdown("---")
-
     region = st.radio("🌍 اختر منطقتك:",
         ["🌴 الخليج والشرق الأوسط", "🌍 عالمي (دولي)", "🇾🇪 اليمن (محلي)"], horizontal=True)
     region_map = {"🌴 الخليج والشرق الأوسط": "gulf", "🌍 عالمي (دولي)": "global", "🇾🇪 اليمن (محلي)": "yemen"}
@@ -426,28 +408,27 @@ def show_pricing_page():
 
     st.markdown("## 🎯 الباقات الفردية")
     c1, c2, c3 = st.columns(3)
-
     with c1:
         st.markdown("### 🆓 مجاني")
         st.markdown("# $0")
         st.markdown("**10 تجارب**")
         st.markdown("✅ محاكاة كاملة")
         st.markdown("❌ مكونات AI")
-
     with c2:
         st.markdown("### 📆 شهري")
         st.markdown(f"# ${PLANS['monthly'][f'price_{region_key}']}")
         st.markdown("**30 يوماً**")
         st.markdown("✅ محاكاة غير محدودة")
         st.markdown("✅ 3 مكونات AI")
+        st.markdown("✅ Chat AI")
         st.markdown("✅ تقارير PDF")
-
     with c3:
         st.markdown("### ⭐ سنوي (الأفضل)")
         st.markdown(f"# ${PLANS['yearly'][f'price_{region_key}']}")
-        st.markdown("**365 يوماً — وفّر 30%**")
+        st.markdown("**365 يوماً — وفّر 20%**")
         st.markdown("✅ كل الميزات")
         st.markdown("✅ API Access")
+        st.markdown("✅ دعم أولوي")
 
     st.markdown("---")
     st.markdown("## 🏢 الباقات المؤسسية")
@@ -462,7 +443,6 @@ def show_pricing_page():
     st.markdown("---")
     st.markdown("## 💳 طرق الدفع")
     st.info("🌍 **جميع الأسعار بالدولار الأمريكي** — التحويل بالعملة المحلية")
-
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("""
@@ -480,7 +460,6 @@ def show_pricing_page():
         - ✅ كريمي / العمقي
         **رقم الاستقبال:** 779193805
         """)
-
     st.success("""
     ### 📩 خطوات الاشتراك:
     1. اختر الباقة
@@ -495,15 +474,10 @@ def show_pricing_page():
 # ============================================================
 
 def admin_dashboard():
-    """لوحة تحكم المسؤول - إدارة العملاء"""
     st.header("🔧 لوحة تحكم المسؤول")
-    st.markdown("*إدارة العملاء والاشتراكات*")
     st.markdown("---")
-
-    # كلمة المرور
     if 'admin_auth' not in st.session_state:
         st.session_state.admin_auth = False
-
     if not st.session_state.admin_auth:
         st.subheader("🔐 تسجيل دخول المسؤول")
         pwd = st.text_input("كلمة المرور:", type="password", key='admin_pwd')
@@ -516,27 +490,20 @@ def admin_dashboard():
                 st.error("❌ كلمة مرور خاطئة")
         return
 
-    # إحصائيات
     stats = get_stats()
-
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("👥 إجمالي العملاء", stats['total'])
     c2.metric("✅ نشط", stats['active'])
     c3.metric("⚠️ قريب الانتهاء", stats['expiring'])
     c4.metric("💰 الإيرادات", f"${stats['revenue']:.2f}")
-
     if not stats['connected']:
         st.error("⚠️ لم يتم الاتصال بقاعدة البيانات. تحقق من Secrets.")
-
     st.markdown("---")
-
     tab1, tab2, tab3 = st.tabs(["➕ إضافة عميل", "📋 قائمة العملاء", "⚠️ تذكيرات"])
 
-    # === Tab 1: إضافة عميل ===
     with tab1:
         st.subheader("➕ إضافة عميل جديد")
         st.info("📌 استلم إشعار الحوالة من الجاد، ثم أدخل البيانات هنا.")
-
         c1, c2 = st.columns(2)
         with c1:
             name = st.text_input("اسم العميل *", key='new_name')
@@ -546,21 +513,17 @@ def admin_dashboard():
             plan = st.selectbox("الباقة *", list(PLANS.keys())[1:], key='new_plan',
                                 format_func=lambda x: PLANS[x]['name'])
             amount = st.number_input("المبلغ المستلم (USD) *", min_value=0.0,
-                                     step=0.01, value=29.99, key='new_amount')
-
+                                     step=0.01, value=39.99, key='new_amount')
         notes = st.text_area("ملاحظات (اختياري)", key='new_notes')
-
         if st.button("✅ إضافة العميل", type="primary", use_container_width=True):
             if name and phone:
                 success, result = add_customer(name, phone, email, plan, amount, notes)
                 if success:
                     st.success(f"✅ تم إضافة العميل بنجاح!")
                     st.balloons()
-
                     st.markdown("---")
                     st.subheader("🎁 الكود الجاهز")
                     st.code(result['code'], language=None)
-
                     st.markdown("### 📋 انسخ الرسالة وأرسلها للعميل:")
                     msg = f"""مرحباً {result['name']} 🌟
 
@@ -579,8 +542,6 @@ def admin_dashboard():
 
 📞 للاستفسارات: 779193805"""
                     st.text_area("الرسالة:", msg, height=250)
-
-                    # رابط واتساب
                     wa_phone = phone.replace('+', '').replace(' ', '').replace('-', '')
                     wa_link = f"https://wa.me/{wa_phone}?text={msg.replace(chr(10), '%0A').replace(' ', '%20')}"
                     st.markdown(f"[📱 إرسال الكود عبر واتساب]({wa_link})")
@@ -589,11 +550,9 @@ def admin_dashboard():
             else:
                 st.warning("⚠️ أدخل الاسم ورقم الجوال على الأقل")
 
-    # === Tab 2: قائمة العملاء ===
     with tab2:
         st.subheader("📋 قائمة العملاء")
         customers = get_all_customers()
-
         if customers:
             for c in customers:
                 try:
@@ -601,7 +560,6 @@ def admin_dashboard():
                     days_left = (end.replace(tzinfo=None) - datetime.now()).days
                 except:
                     days_left = 0
-
                 status_icon = "🟢" if c['status'] == 'active' and days_left > 0 else "🔴"
                 with st.expander(f"{status_icon} {c['name']} - {PLANS.get(c['plan'], {}).get('name', c['plan'])}"):
                     col1, col2 = st.columns(2)
@@ -613,7 +571,6 @@ def admin_dashboard():
                         st.write(f"**🎫 الكود:** `{c['activation_code']}`")
                         st.write(f"**⏱️ المتبقي:** {days_left} يوم")
                         st.write(f"**📅 الحالة:** {c['status']}")
-
                     if st.button(f"🗑️ حذف", key=f"del_{c['id']}"):
                         if delete_customer(c['id']):
                             st.success("تم الحذف")
@@ -621,11 +578,9 @@ def admin_dashboard():
         else:
             st.info("لا يوجد عملاء بعد")
 
-    # === Tab 3: التذكيرات ===
     with tab3:
         st.subheader("⚠️ العملاء الذين ينتهي اشتراكهم قريباً")
         expiring = get_expiring_customers(7)
-
         if expiring:
             for c in expiring:
                 try:
@@ -633,11 +588,8 @@ def admin_dashboard():
                     days_left = (end.replace(tzinfo=None) - datetime.now()).days
                 except:
                     days_left = 0
-
                 with st.expander(f"⚠️ {c['name']} - متبقي {days_left} يوم"):
                     st.write(f"📞 {c['phone']}")
-                    st.write(f"الباقة: {PLANS.get(c['plan'], {}).get('name', c['plan'])}")
-
                     reminder = f"""مرحباً {c['name']} 🌟
 
 اشتراكك في HYDROMEM Dynamics AI سينتهي خلال {days_left} أيام.
@@ -656,7 +608,6 @@ def admin_dashboard():
                     st.markdown(f"[📱 إرسال تذكير]({wa_link})")
         else:
             st.success("✅ لا يوجد عملاء ينتهي اشتراكهم خلال 7 أيام")
-
     st.markdown("---")
     if st.button("🚪 تسجيل خروج المسؤول"):
         st.session_state.admin_auth = False
@@ -677,6 +628,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
     "🏠 الرئيسية",
     "💎 باقات الاشتراك",
     "🔧 لوحة التحكم",
+    "💬 HYDROMEM Chat",
     "⚙️ النموذج الديناميكي العام",
     "🦵 خشونة الركبة",
     "🦴 التئام العظام",
@@ -686,7 +638,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 12.0")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 13.0")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
@@ -694,9 +646,6 @@ show_subscription_status()
 show_activation_field()
 
 
-# ============================================================
-#                   الصفحة الرئيسية
-# ============================================================
 if app == "🏠 الرئيسية":
     st.header("مرحباً بكم في HYDROMEM Dynamics AI")
     c1, c2 = st.columns(2)
@@ -706,6 +655,7 @@ if app == "🏠 الرئيسية":
         منصة حاسوبية متكاملة لمحاكاة وتحليل الأنظمة الديناميكية المعقدة.
 
         ### 🔬 التطبيقات
+        - 💬 HYDROMEM Chat (مساعد AI)
         - ⚙️ النموذج الديناميكي العام
         - 🦵 خشونة الركبة
         - 🦴 التئام العظام
@@ -719,33 +669,28 @@ if app == "🏠 الرئيسية":
         - المحاكاة العددية (odeint)
         - تحليل الاستقرار (Jacobian)
         - الذكاء الاصطناعي (MLP + RF)
+        - Gemini AI (Chat + تحليل)
         - قاعدة بيانات Supabase
         - تقارير طبية تلقائية
         """)
         st.success("✅ منصة كاملة جاهزة")
 
 
-# ============================================================
-#              صفحة التسعير
-# ============================================================
 elif app == "💎 باقات الاشتراك":
     show_pricing_page()
 
 
-# ============================================================
-#              لوحة تحكم المسؤول
-# ============================================================
 elif app == "🔧 لوحة التحكم":
     admin_dashboard()
 
 
-# ============================================================
-#         النموذج الديناميكي العام
-# ============================================================
+elif app == "💬 HYDROMEM Chat":
+    chat_page()
+
+
 elif app == "⚙️ النموذج الديناميكي العام":
     st.header("⚙️ النموذج الديناميكي العام")
     st.markdown("---")
-
     c1, c2 = st.columns([1, 3])
     with c1:
         A0 = st.slider("A₀", 0.0, 2.0, 0.5, 0.1)
@@ -755,7 +700,6 @@ elif app == "⚙️ النموذج الديناميكي العام":
         b  = st.slider("β", 0.1, 2.0, 0.8, 0.1)
         g  = st.slider("γ", 0.0, 1.0, 0.3, 0.05)
         te = st.slider("الزمن", 10, 200, 50)
-
     with c2:
         t = np.linspace(0, te, 500)
         s = odeint(general, [A0, T0], t, args=(mu, k, b, g))
@@ -766,7 +710,6 @@ elif app == "⚙️ النموذج الديناميكي العام":
         add_values_on_plot(ax, t, s[:,1], num_points=6, color='red', fmt='{:.3f}')
         ax.set_xlabel('الزمن'); ax.legend(); ax.grid(alpha=0.3)
         st.pyplot(fig)
-
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("A النهائي", f"{s[-1,0]:.6f}")
     c2.metric("Θ النهائي", f"{s[-1,1]:.6f}")
@@ -775,20 +718,15 @@ elif app == "⚙️ النموذج الديناميكي العام":
     use_trial()
 
 
-# ============================================================
-#              خشونة الركبة
-# ============================================================
 elif app == "🦵 خشونة الركبة":
     st.header("🦵 محاكاة خشونة الركبة")
     st.markdown("---")
-
     c1, c2 = st.columns([1, 3])
     with c1:
         yrs = st.slider("عدد السنوات", 1, 25, 10)
         kp = st.slider("معدل إنتاج MMP", 0.003, 0.012, 0.005, 0.001)
         kd = st.slider("معدل التحلل", 0.008, 0.025, 0.015, 0.001)
         a  = st.slider("معامل التلف", 0.00005, 0.0004, 0.00010, 0.00005)
-
     with c2:
         t = np.linspace(0, yrs*365, 1000)
         s = odeint(cartilage, [0, 1.0], t, args=(kp, kd, a, 0.5))
@@ -804,12 +742,10 @@ elif app == "🦵 خشونة الركبة":
         add_values_on_plot(ax2, t/365, s[:,1], num_points=6, color='darkblue', fmt='{:.3f}')
         ax1.grid(alpha=0.3)
         st.pyplot(fig)
-
     c1, c2, c3 = st.columns(3)
     c1.metric("الصلابة النهائية", f"{s[-1,1]:.6f}")
     c2.metric("مرحلة KL", classify_kl(s[-1,1]))
     c3.metric("MMP النهائي", f"{s[-1,0]:.6f}")
-
     st.markdown("---")
     st.subheader("⏱️ المدة الزمنية للوصول لكل مرحلة")
     time_kl2 = time_to_reach(s[:,1], t/365, 0.70, 'decrease')
@@ -819,14 +755,12 @@ elif app == "🦵 خشونة الركبة":
     d1.metric("⏱️ إلى KL-2", f"{time_kl2:.1f} سنة" if time_kl2 else "لا يصل")
     d2.metric("⏱️ إلى KL-3", f"{time_kl3:.1f} سنة" if time_kl3 else "لا يصل")
     d3.metric("⏱️ إلى KL-4", f"{time_kl4:.1f} سنة" if time_kl4 else "لا يصل")
-
     results = {"الصلابة النهائية": f"{s[-1,1]:.4f}", "مرحلة KL": classify_kl(s[-1,1]),
                "MMP النهائي": f"{s[-1,0]:.4f}", "عدد السنوات": f"{yrs}"}
     timeline = []
     if time_kl2: timeline.append(f"بعد {time_kl2:.1f} سنة: KL-2")
     if time_kl3: timeline.append(f"بعد {time_kl3:.1f} سنة: KL-3")
     if time_kl4: timeline.append(f"بعد {time_kl4:.1f} سنة: KL-4")
-
     stage = classify_kl(s[-1,1])
     if "KL-4" in stage:
         rec = {"نمط الحياة": ["تقليل الوزن", "تمارين منخفضة التأثير"],
@@ -838,20 +772,15 @@ elif app == "🦵 خشونة الركبة":
     use_trial()
 
 
-# ============================================================
-#              التئام العظام
-# ============================================================
 elif app == "🦴 التئام العظام":
     st.header("🦴 محاكاة التئام العظام")
     st.markdown("---")
-
     c1, c2 = st.columns([1, 3])
     with c1:
         wk = st.slider("عدد الأسابيع", 4, 24, 16)
         km = st.slider("معدل التمعدن", 0.05, 0.5, 0.3, 0.05)
         mu = st.slider("معامل النمو", 1.1, 3.0, 2.0, 0.1)
         Cm = st.slider("الصلابة القصوى", 10.0, 30.0, 20.0, 1.0)
-
     with c2:
         t = np.linspace(0, wk*7, 500)
         s = odeint(bone, [0,0,0], t, args=(km, mu, Cm))
@@ -863,13 +792,11 @@ elif app == "🦴 التئام العظام":
         add_values_on_plot(ax, t/7, s[:,2], num_points=5, color='red', fmt='{:.2f}')
         ax.set_xlabel('الأسابيع'); ax.legend(); ax.grid(alpha=0.3)
         st.pyplot(fig)
-
     C = s[-1,2]
     c1, c2, c3 = st.columns(3)
     c1.metric("الصلابة النهائية", f"{C:.4f}")
     c2.metric("نسبة الحمل", f"{(C/Cm)*100:.2f}%")
     c3.metric("المرحلة", healing_stage(C, Cm))
-
     st.markdown("---")
     st.subheader("⏱️ المدة الزمنية للالتئام")
     t_50 = time_to_reach(s[:,2], t/7, 0.5*Cm, 'increase')
@@ -879,34 +806,27 @@ elif app == "🦴 التئام العظام":
     d1.metric("⏱️ لـ 50% التئام", f"{t_50:.1f} أسبوع" if t_50 else "لا يصل")
     d2.metric("⏱️ لـ 90% التئام", f"{t_90:.1f} أسبوع" if t_90 else "لا يصل")
     d3.metric("⏱️ للالتئام الكامل", f"{t_100:.1f} أسبوع" if t_100 else "لا يصل")
-
     results = {"الصلابة النهائية": f"{C:.4f}", "نسبة الحمل": f"{(C/Cm)*100:.2f}%",
                "المرحلة": healing_stage(C, Cm)}
     timeline = []
     if t_50: timeline.append(f"الأسبوع {t_50:.1f}: 50%")
     if t_90: timeline.append(f"الأسبوع {t_90:.1f}: 90%")
     if t_100: timeline.append(f"الأسبوع {t_100:.1f}: التئام كامل")
-
     rec = {"الحالة": ["الالتئام يسير بشكل جيد" if C/Cm > 0.5 else "يحتاج متابعة"],
            "المتابعة": ["زيارة طبيب العظام"]}
     generate_report("التئام العظام", results, timeline, rec)
     use_trial()
 
 
-# ============================================================
-#              الأقراص الفقرية
-# ============================================================
 elif app == "💧 الأقراص الفقرية":
     st.header("💧 محاكاة الأقراص الفقرية")
     st.markdown("---")
-
     c1, c2 = st.columns([1, 3])
     with c1:
         h = st.slider("عدد الساعات", 6, 48, 24)
         ks = st.slider("معدل الانتفاخ", 0.05, 0.2, 0.1, 0.01)
         kd = st.slider("معدل التحلل", 0.02, 0.1, 0.05, 0.01)
         pl = st.slider("الحمل", 0.2, 1.0, 0.5, 0.1)
-
     with c2:
         t = np.linspace(0, h, 500)
         s = odeint(disc, [0.5, 1.0, 0.3], t, args=(ks, kd, pl))
@@ -922,12 +842,10 @@ elif app == "💧 الأقراص الفقرية":
         add_values_on_plot(ax2, t, s[:,1], num_points=4, color='darkgreen', fmt='{:.3f}')
         ax1.grid(alpha=0.3)
         st.pyplot(fig)
-
     c1, c2, c3 = st.columns(3)
     c1.metric("الماء النهائي", f"{s[-1,0]*100:.2f}%")
     c2.metric("الارتفاع", f"{s[-1,1]:.6f}")
     c3.metric("الضغط", f"{s[-1,2]:.6f}")
-
     st.markdown("---")
     st.subheader("⏱️ المدة الزمنية")
     t_70 = time_to_reach(s[:,0], t, 0.70, 'increase')
@@ -937,7 +855,6 @@ elif app == "💧 الأقراص الفقرية":
     d1.metric("⏱️ لـ 70% ماء", f"{t_70:.1f} ساعة" if t_70 else "لا يصل")
     d2.metric("⏱️ لـ 80% ماء", f"{t_80:.1f} ساعة" if t_80 else "لا يصل")
     d3.metric("⏱️ ذروة الماء", f"{t_peak:.1f} ساعة")
-
     results = {"الماء النهائي": f"{s[-1,0]*100:.2f}%", "الارتفاع": f"{s[-1,1]:.4f}",
                "الضغط": f"{s[-1,2]:.4f}"}
     timeline = [f"ذروة الماء: {t_peak:.1f} ساعة"]
@@ -947,18 +864,13 @@ elif app == "💧 الأقراص الفقرية":
     use_trial()
 
 
-# ============================================================
-#              التئام الجروح
-# ============================================================
 elif app == "🩹 التئام الجروح":
     st.header("🩹 محاكاة التئام الجروح")
     st.markdown("---")
-
     c1, c2 = st.columns([1, 3])
     with c1:
         wk = st.slider("عدد الأسابيع", 4, 16, 12)
         scenario = st.selectbox("السيناريو", ["Normal (طبيعي)", "Infected (مصاب)", "Fast (سريع)"])
-
         if "Normal" in scenario:
             p = {'ke':1.2,'ka':0.15,'kf':1.0,'kd':0.10,'kc':1.0,'kr':0.20,
                  'ki':0.5,'kii':0.6,'kb':0.2,'kbb':0.8,'km':0.3,'kmm':0.5}
@@ -968,7 +880,6 @@ elif app == "🩹 التئام الجروح":
         else:
             p = {'ke':1.5,'ka':0.08,'kf':1.3,'kd':0.05,'kc':1.3,'kr':0.10,
                  'ki':0.3,'kii':0.8,'kb':0.1,'kbb':1.0,'km':0.2,'kmm':0.6}
-
     with c2:
         t = np.linspace(0, wk*7, 1000)
         s = odeint(wound, [0.01,0.01,0,0.95,0.3,0.1], t, args=(p,))
@@ -987,12 +898,10 @@ elif app == "🩹 التئام الجروح":
         axes[1,1].set_title('الحمل البكتيري'); axes[1,1].grid(alpha=0.3)
         plt.tight_layout()
         st.pyplot(fig)
-
     c1, c2, c3 = st.columns(3)
     c1.metric("التغطية النهائية", f"{max(s[-1,0],0)*100:.2f}%")
     c2.metric("الكولاجين النهائي", f"{max(s[-1,2],0)*100:.2f}%")
     c3.metric("البكتيريا", f"{s[-1,4]:.6f}")
-
     st.markdown("---")
     st.subheader("⏱️ المدة الزمنية للالتئام")
     coverage = np.maximum(s[:,0], 0)
@@ -1003,14 +912,12 @@ elif app == "🩹 التئام الجروح":
     d1.metric("⏱️ لـ 50% تغطية", f"{t_50:.1f} أسبوع" if t_50 else "لا يصل")
     d2.metric("⏱️ لـ 90% تغطية", f"{t_90:.1f} أسبوع" if t_90 else "لا يصل")
     d3.metric("⏱️ للالتئام الكامل", f"{t_95:.1f} أسبوع" if t_95 else "لا يصل")
-
     results = {"التغطية": f"{max(s[-1,0],0)*100:.2f}%",
                "الكولاجين": f"{max(s[-1,2],0)*100:.2f}%",
                "السيناريو": scenario}
     timeline = []
     if t_50: timeline.append(f"الأسبوع {t_50:.1f}: 50%")
     if t_90: timeline.append(f"الأسبوع {t_90:.1f}: 90%")
-
     if "Infected" in scenario:
         rec = {"الإجراء العاجل": ["تطهير الجرح يومياً", "مضادات حيوية"],
                "المتابعة": ["زيارة طبيب يومياً"]}
@@ -1021,9 +928,6 @@ elif app == "🩹 التئام الجروح":
     use_trial()
 
 
-# ============================================================
-#         مكونات الذكاء الاصطناعي
-# ============================================================
 elif app == "🧠 مكونات الذكاء الاصطناعي":
     if not can_use_ai():
         st.error("🔒 **هذه الميزة متاحة فقط في الباقات المدفوعة**")
@@ -1039,9 +943,7 @@ elif app == "🧠 مكونات الذكاء الاصطناعي":
     else:
         st.header("🧠 مكونات الذكاء الاصطناعي")
         st.markdown("---")
-
         tab1, tab2, tab3 = st.tabs(["⚡ Surrogate", "🎯 Classifier", "📊 Regressor"])
-
         with tab1:
             with st.spinner("جاري التدريب..."):
                 sm, loss = train_surrogate()
@@ -1050,7 +952,6 @@ elif app == "🧠 مكونات الذكاء الاصطناعي":
             c2.metric("Speedup", "~50×")
             c3.metric("Architecture", "64-128-64")
             st.success("✅ Surrogate Model جاهز")
-
         with tab2:
             with st.spinner("جاري التدريب..."):
                 clf, acc = train_classifier()
@@ -1059,7 +960,6 @@ elif app == "🧠 مكونات الذكاء الاصطناعي":
             c2.metric("Trees", "100")
             c3.metric("Samples", "800")
             st.success("✅ Stability Classifier جاهز")
-
         with tab3:
             with st.spinner("جاري التدريب..."):
                 reg, r2 = train_regressor()
@@ -1070,9 +970,6 @@ elif app == "🧠 مكونات الذكاء الاصطناعي":
             st.success("✅ Stiffness Regressor جاهز")
 
 
-# ============================================================
-#                    التذييل
-# ============================================================
 st.markdown("---")
 st.markdown("### 📞 للتواصل")
 c1, c2, c3 = st.columns(3)
@@ -1082,7 +979,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 12.0 | "
-    "5 تطبيقات + 3 مكونات AI + تقارير + Supabase | TRL 3 | "
+    "**HYDROMEM Dynamics AI** — الإصدار 13.0 | "
+    "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
