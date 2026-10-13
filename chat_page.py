@@ -30,17 +30,13 @@ def init_gemini():
         st.error("⚠️ مكتبة google-genai غير مثبتة. يرجى إضافتها إلى requirements.txt")
         return None
     try:
-        # استخدام .get() والتحقق من عدم وجود مسافات فارغة
         api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
         if not api_key:
             st.warning("⚠️ لم يتم العثور على مفتاح GEMINI_API_KEY في إعدادات Streamlit Secrets. يرجى إضافته.")
             return None
         
-        # ✅ تم إضافة http_options لإجبار النظام على استخدام الإصدار المستقر v1
-        client = genai.Client(
-            api_key=api_key,
-            http_options={'api_version': 'v1'}
-        )
+        # تهيئة العميل بشكل صحيح ومباشر
+        client = genai.Client(api_key=api_key)
         return client
     except Exception as e:
         st.error(f"❌ خطأ في تهيئة Gemini: {str(e)}")
@@ -87,11 +83,11 @@ def call_gemini(client, prompt, image=None):
     """استدعاء Gemini API بالطريقة الصحيحة"""
     contents = [prompt, image] if image else prompt
     
-    # ✅ قائمة النماذج الصحيحة والمتاحة في الإصدار v1
+    # ✅ النماذج الحديثة والمتاحة حالياً (تم إيقاف إصدار 1.5)
     models_to_try = [
-        'gemini-1.5-flash',
-        'gemini-1.5-pro',
-        'gemini-1.5-flash-latest'
+        'gemini-2.5-flash',
+        'gemini-2.5-pro',
+        'gemini-2.0-flash'
     ]
     
     last_error = None
