@@ -27,17 +27,20 @@ def classify_kl(m):
 
 def init_gemini():
     if not GEMINI_AVAILABLE:
+        st.error("⚠️ مكتبة google-genai غير مثبتة. يرجى إضافتها إلى requirements.txt")
         return None
     try:
-        api_key = st.secrets.get("GEMINI_API_KEY", "")
+        # استخدام .get() والتحقق من عدم وجود مسافات فارغة
+        api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
         if not api_key:
+            st.warning("⚠️ لم يتم العثور على مفتاح GEMINI_API_KEY في إعدادات Streamlit Secrets. يرجى إضافته.")
             return None
-        client = genai.Client(
-            api_key=api_key,
-            http_options={'api_version': 'v1'}
-        )
+        
+        # تهيئة العميل بشكل صحيح (بدون http_options لتجنب مشاكل المصادقة)
+        client = genai.Client(api_key=api_key)
         return client
-    except Exception:
+    except Exception as e:
+        st.error(f"❌ خطأ في تهيئة Gemini: {str(e)}")
         return None
 
 
@@ -81,12 +84,11 @@ def call_gemini(client, prompt, image=None):
     """استدعاء Gemini API بالطريقة الصحيحة"""
     contents = [prompt, image] if image else prompt
     
-    # قائمة النماذج للتجربة
+    # قائمة النماذج الصحيحة والمتاحة حالياً
     models_to_try = [
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
         'gemini-1.5-flash',
         'gemini-1.5-pro',
+        'gemini-pro'
     ]
     
     last_error = None
@@ -112,7 +114,6 @@ def handle_text_input(prompt):
     client = init_gemini()
     with st.chat_message("assistant"):
         if not client:
-            st.error("⚠️ خدمة AI غير متاحة. تحقق من GEMINI_API_KEY في Secrets.")
             return
         
         is_equation, is_research, is_code = detect_question_type(prompt)
@@ -155,7 +156,6 @@ def handle_image_input(uploaded_image):
     client = init_gemini()
     with st.chat_message("assistant"):
         if not client:
-            st.error("⚠️ خدمة AI غير متاحة")
             return
         try:
             with st.spinner("🔬 جاري تحليل الصورة..."):
@@ -196,7 +196,6 @@ def handle_file_input(uploaded_file):
     client = init_gemini()
     with st.chat_message("assistant"):
         if not client:
-            st.error("⚠️ خدمة AI غير متاحة")
             return
         try:
             with st.spinner("📊 جاري تحليل الملف..."):
