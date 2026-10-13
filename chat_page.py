@@ -9,6 +9,7 @@ import numpy as np
 from scipy.integrate import odeint
 from PIL import Image
 import io
+import PyPDF2 # ✅ مكتبة قراءة ملفات PDF
 
 try:
     from google import genai
@@ -66,7 +67,7 @@ def get_system_prompt():
 2. كتابة أبحاث علمية كاملة (مقدمة، منهجية، نتائج، خاتمة، مراجع)
 3. توليد أكواد Python قابلة للتشغيل
 4. تحليل الصور الطبية والعلمية
-5. تحليل الملفات (CSV، TXT)
+5. تحليل الملفات (CSV، TXT، PDF)
 6. تقديم توصيات طبية إرشادية
 
 قواعد مهمة:
@@ -82,7 +83,6 @@ def call_gemini(client, prompt, image=None):
     """استدعاء Gemini API بالطريقة الصحيحة"""
     contents = [prompt, image] if image else prompt
     
-    # ✅ النماذج المحدثة حسب وثائق جوجل الرسمية (أكتوبر 2026)
     models_to_try = [
         'gemini-3.8-flash',
         'gemini-3.7-flash',
@@ -182,9 +182,16 @@ def handle_image_input(uploaded_image):
 
 def handle_file_input(uploaded_file):
     try:
-        content = uploaded_file.read().decode('utf-8', errors='ignore')
-    except:
-        content = "غير قادر على قراءة الملف"
+        # ✅ قراءة ملفات PDF
+        if uploaded_file.name.endswith('.pdf'):
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            content = ""
+            for page in pdf_reader.pages:
+                content += page.extract_text() or ""
+        else:
+            content = uploaded_file.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        content = f"غير قادر على قراءة الملف: {str(e)}"
     
     with st.chat_message("user"):
         st.markdown(f"📎 [ملف]: {uploaded_file.name}")
@@ -239,7 +246,7 @@ def chat_page():
         **يمكنك:**
         - 📝 كتابة سؤال أو معادلة
         - 🖼️ رفع صورة (MRI، معادلة)
-        - 📎 رفع ملف (CSV، TXT)
+        - 📎 رفع ملف (CSV، TXT، PDF)
         
         **المساعد يجيب على:**
         - الرياضيات والفيزياء
@@ -275,8 +282,8 @@ def chat_page():
     
     with tab3:
         uploaded_file = st.file_uploader(
-            "ارفع ملف (CSV / TXT)",
-            type=['csv', 'txt'], key='chat_file'
+            "ارفع ملف (CSV / TXT / PDF)",
+            type=['csv', 'txt', 'pdf'], key='chat_file'
         )
         if uploaded_file:
             if st.button("📊 تحليل الملف", key='analyze_file'):
