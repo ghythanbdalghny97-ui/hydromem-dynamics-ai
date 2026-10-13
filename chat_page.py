@@ -28,6 +28,7 @@ def classify_kl(m):
 
 
 def init_gemini():
+    """تهيئة عميل Gemini باستخدام الإصدار المستقر v1"""
     if not GEMINI_AVAILABLE:
         st.error("⚠️ مكتبة google-genai غير مثبتة.")
         return None
@@ -37,7 +38,11 @@ def init_gemini():
             st.warning("⚠️ لم يتم العثور على مفتاح GEMINI_API_KEY في الإعدادات.")
             return None
         
-        client = genai.Client(api_key=api_key)
+        # ✅ استخدام api_version='v1' لضمان دعم النماذج الجديدة
+        client = genai.Client(
+            api_key=api_key,
+            http_options={'api_version': 'v1'}
+        )
         return client
     except Exception as e:
         st.error(f"❌ خطأ في تهيئة Gemini: {str(e)}")
@@ -67,7 +72,7 @@ def call_gemini_stream(client, contents):
         # حل احتياطي في حال فشل النموذج السريع
         try:
             response_stream = client.models.generate_content_stream(
-                model='gemini-3.1-flash',
+                model='gemini-3.5-flash',
                 contents=contents
             )
             for chunk in response_stream:
@@ -90,7 +95,7 @@ def handle_text_input(prompt):
             return
         
         # 1. بناء ذاكرة المحادثة (آخر 6 رسائل) لكي يتذكر السياق
-        recent_history = st.session_state.chat_history[-7:-1] # استثناء السؤال الحالي
+        recent_history = st.session_state.chat_history[-7:-1]
         history_text = ""
         for msg in recent_history:
             role_name = "المستخدم" if msg['role'] == 'user' else "HYDROMEM"
@@ -118,7 +123,6 @@ def handle_text_input(prompt):
             
             for chunk in call_gemini_stream(client, contents):
                 full_response += chunk
-                # إضافة مؤشر وهمي أثناء الكتابة
                 response_placeholder.markdown(full_response + "▌")
             
             response_placeholder.markdown(full_response)
@@ -139,7 +143,6 @@ def handle_text_input(prompt):
                 )
             with col2:
                 if st.button("🔄 إعادة توليد الرد", key=f"regen_{datetime.now().timestamp()}"):
-                    # حذف آخر رد وإعادة المحاولة
                     st.session_state.chat_history.pop()
                     st.rerun()
                     
