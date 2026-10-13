@@ -82,12 +82,13 @@ def call_gemini(client, prompt, image=None):
     """استدعاء Gemini API بالطريقة الصحيحة"""
     contents = [prompt, image] if image else prompt
     
-    # ✅ تم تحديث النماذج بناءً على طلب جوجل الأخير (gemini-3.8-flash)
+    # ✅ النماذج المحدثة حسب وثائق جوجل الرسمية (أكتوبر 2026)
     models_to_try = [
         'gemini-3.8-flash',
-        'gemini-3.1-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
         'gemini-3.1-pro-preview',
-        'gemini-2.5-flash'
+        'gemini-3.5-flash-lite'
     ]
     
     last_error = None
