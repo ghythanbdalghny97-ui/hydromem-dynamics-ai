@@ -32,7 +32,10 @@ def init_gemini():
         api_key = st.secrets.get("GEMINI_API_KEY", "")
         if not api_key:
             return None
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(
+            api_key=api_key,
+            http_options={'api_version': 'v1'}
+        )
         return client
     except Exception:
         return None
@@ -76,26 +79,29 @@ def get_system_prompt():
 
 def call_gemini(client, prompt, image=None):
     """استدعاء Gemini API بالطريقة الصحيحة"""
-    try:
-        if image:
-            contents = [prompt, image]
-        else:
-            contents = prompt
-        
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=contents
-        )
-        return response.text
-    except Exception as e:
+    contents = [prompt, image] if image else prompt
+    
+    # قائمة النماذج للتجربة
+    models_to_try = [
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+    ]
+    
+    last_error = None
+    for model_name in models_to_try:
         try:
             response = client.models.generate_content(
-                model='gemini-1.5-flash',
+                model=model_name,
                 contents=contents
             )
             return response.text
-        except Exception as e2:
-            raise Exception(f"فشل الاتصال: {str(e2)}")
+        except Exception as e:
+            last_error = e
+            continue
+    
+    raise Exception(f"فشل الاتصال بجميع النماذج: {str(last_error)}")
 
 
 def handle_text_input(prompt):
