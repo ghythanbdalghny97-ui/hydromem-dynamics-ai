@@ -33,12 +33,27 @@ def init_gemini():
         if not api_key:
             return None
         genai.configure(api_key=api_key)
-        # استخدام gemini-pro (الأكثر توافقاً)
-        try:
-            return genai.GenerativeModel('gemini-pro')
-        except Exception:
-            # بديل إذا فشل الأول
-            return genai.GenerativeModel('gemini-1.5-flash-latest')
+        
+        # جرب كل النماذج المتاحة بالترتيب
+        models_to_try = [
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-002',
+            'gemini-1.5-flash-001',
+            'gemini-1.5-pro',
+            'gemini-1.5-pro-002',
+            'gemini-1.0-pro',
+            'gemini-pro',
+        ]
+        
+        for model_name in models_to_try:
+            try:
+                m = genai.GenerativeModel(model_name)
+                test = m.generate_content("test")
+                return m
+            except Exception:
+                continue
+        
+        return None
     except Exception:
         return None
 
