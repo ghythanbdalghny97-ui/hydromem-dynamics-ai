@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v15.2 (Smart Hybrid - Multi-Retry)
+HYDROMEM Dynamics AI v15.3 (Final Stable Edition)
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 15.2 — Full Platform + Smart NLP + Multi-Strategy Extraction
+Version 15.3 — Full Platform + Word-Based Smart NLP
 ============================================================
 """
 
@@ -146,17 +146,13 @@ apply_simulation_overrides()
 
 
 # ============================================================
-#              محرك استخراج الأرقام الذكي (5 استراتيجيات)
+#         محرك استخراج الأرقام الذكي (Word-Based)
 # ============================================================
 
 def smart_extract_number(text, keywords, previous_value=None):
     """
-    محرك استخراج ذكي متعدد الاستراتيجيات:
-    - الاستراتيجية 1: Regex دقيق (رقم ملاصق للكلمة)
-    - الاستراتيجية 2: Regex مع مسافات (رقم + مسافة + كلمة)
-    - الاستراتيجية 3: التقارب الموضعي (أقرب رقم للكلمة)
-    - الاستراتيجية 4: إذا كان هناك رقم واحد فقط في النص، استخدمه
-    - الاستراتيجية 5: إذا فشل كل شيء، أعد القيمة السابقة (لا تغيير)
+    محرك استخراج ذكي يعتمد على تقسيم النص إلى كلمات.
+    يبحث عن الرقم الأقرب للكلمة المفتاحية (بعدها أولاً، ثم قبلها).
     """
     import re
     
@@ -165,58 +161,38 @@ def smart_extract_number(text, keywords, previous_value=None):
     for ar, en in arabic_to_english.items():
         text = text.replace(ar, en)
     
-    # جمع كل الأرقام في النص مع مواقعها
-    all_numbers = [(m.start(), m.end(), float(m.group())) for m in re.finditer(r"\d+(?:\.\d+)?", text)]
+    # تقسيم النص إلى كلمات
+    words = text.split()
     
-    if not all_numbers:
-        return None  # لا يوجد أرقام
-    
-    # محاولة البحث عن الكلمة المفتاحية
     for kw in keywords:
-        kw_pos = text.find(kw)
-        if kw_pos == -1:
-            continue
-        
-        # === الاستراتيجية 1 & 2: Regex دقيق (رقم قبل الكلمة أو بعدها) ===
-        # قبل الكلمة
-        pattern_before = r"(\d+(?:\.\d+)?)\s*" + re.escape(kw)
-        match = re.search(pattern_before, text)
-        if match:
-            return float(match.group(1))
-        
-        # بعد الكلمة
-        pattern_after = re.escape(kw) + r"\s*(\d+(?:\.\d+)?)"
-        match = re.search(pattern_after, text)
-        if match:
-            return float(match.group(1))
-        
-        # === الاستراتيجية 3: التقارب الموضعي (الأقرب للكلمة) ===
-        best_num = None
-        best_distance = float('inf')
-        for start, end, val in all_numbers:
-            if end <= kw_pos:
-                distance = kw_pos - end  # الرقم قبل الكلمة
-            else:
-                distance = start - (kw_pos + len(kw))  # الرقم بعد الكلمة
-            
-            if 0 <= distance < best_distance:
-                best_distance = distance
-                best_num = val
-        
-        if best_num is not None and best_distance < 40:
-            return best_num
+        # البحث عن أي كلمة تحتوي على الكلمة المفتاحية
+        for i, word in enumerate(words):
+            if kw in word:
+                # أولاً: البحث في الكلمتين التاليتين (بعد الكلمة المفتاحية)
+                for j in range(i + 1, min(i + 3, len(words))):
+                    cleaned = words[j].strip('.,،؛:!؟"\'')
+                    m = re.fullmatch(r'\d+(?:\.\d+)?', cleaned)
+                    if m:
+                        return float(m.group())
+                
+                # ثانياً: البحث في الكلمتين السابقتين (قبل الكلمة المفتاحية)
+                for j in range(i - 1, max(i - 3, -1), -1):
+                    cleaned = words[j].strip('.,،؛:!؟"\'')
+                    m = re.fullmatch(r'\d+(?:\.\d+)?', cleaned)
+                    if m:
+                        return float(m.group())
     
-    # === الاستراتيجية 4: إذا كان هناك رقم واحد فقط في النص كاملاً ===
-    if len(all_numbers) == 1:
-        return all_numbers[0][2]
+    # خيار احتياطي: إذا كان هناك رقم واحد فقط في النص كاملاً
+    all_nums = re.findall(r'\d+(?:\.\d+)?', text)
+    if len(all_nums) == 1:
+        return float(all_nums[0])
     
-    # === الاستراتيجية 5: فشل كل شيء ===
     return None
 
 
 def process_chat_command(user_input, app_name):
     """
-    معالجة طلبات الدردشة مع نظام Retry متعدد الاستراتيجيات.
+    معالجة طلبات الدردشة مع استخراج ذكي للأرقام.
     """
     updated = False
     msg_extra = ""
@@ -855,7 +831,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.2")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.3")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
@@ -1274,7 +1250,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 15.2 (Smart Hybrid - Multi-Retry) | "
+    "**HYDROMEM Dynamics AI** — الإصدار 15.3 (Final Stable Edition) | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
