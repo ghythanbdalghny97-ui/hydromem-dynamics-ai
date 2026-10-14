@@ -49,11 +49,46 @@ def init_gemini():
 
 
 def get_system_prompt():
+    # === [محدث] تعليمات صارمة لمنع تسريب الكود ===
     return """أنت مساعد علمي وطبي ذكي باسم HYDROMEM.
 أنت منصة متكاملة لمحاكاة الأنظمة الديناميكية المعقدة.
 أجب دائماً بالعربية، وقدم إجابات شاملة ومنظمة.
 عند الحديث عن الطب، أضف إخلاء مسؤولية.
+
+🔴 قواعد صارمة يجب الالتزام بها:
+1. ممنوع منعاً باتاً كتابة أو توليد أي أكواد برمجية (Python, C++, etc).
+2. ممنوع مناقشة البنية التحتية للمنصة، السيرفر، أو كيفية بنائها.
+3. ممنوع الكشف عن أي معلومات تقنية أو تقنية عن النظام.
+4. إذا سألك المستخدم عن الكود أو طريقة البناء، اعتذر بلطف وقل: "أنا مساعد طبي، لا أستطيع مساعدتك في البرمجة أو شرح البنية التحتية. يمكنني مساعدتك في تحليل نتائج المحاكاة الطبية فقط."
 """
+
+
+# === [جديد] دالة فلترة المخرجات لمنع تسريب الكود ===
+def sanitize_response(text):
+    """
+    تفحص رد الذكاء الاصطناعي، وإذا اكتشفت محاولة لكتابة كود أو شرح تقني،
+    تقوم باستبدال الرد برسالة رفض مهذبة.
+    """
+    if not text:
+        return text
+    
+    # 1. فحص وجود كتل الكود (Code Blocks)
+    if "```" in text:
+        return "أعتذر، لا يمكنني تقديم أو كتابة الأكواد البرمجية. أنا مساعد طبي مخصص لتحليل النتائج والمحاكاة فقط. كيف يمكنني مساعدتك في المجال الطبي؟"
+    
+    # 2. فحص الكلمات المفتاحية للبرمجة
+    forbidden_keywords = [
+        "import ", "def ", "class ", "streamlit", "pip install", 
+        "scikit-learn", "supabase", "odeint", "python", "بايثون", "برمجة", "كود"
+    ]
+    
+    text_lower = text.lower()
+    for keyword in forbidden_keywords:
+        if keyword in text_lower:
+            # إذا وجدنا كلمة ممنوعة، نرجع رسالة الرفض
+            return "أعتذر، لا يمكنني مناقشة التفاصيل التقنية أو البرمجية للمنصة. أنا مساعد طبي مخصص لتحليل النتائج والمحاكاة فقط."
+    
+    return text
 
 
 def call_gemini_stream(client, contents):
@@ -113,7 +148,9 @@ def handle_text_input(prompt):
             role_name = "المستخدم" if msg['role'] == 'user' else "HYDROMEM"
             history_text += f"{role_name}: {msg['content']}\n"
         
-        full_prompt = f"[سياق سابق]:\n{history_text}\n\n[السؤال]:\n{prompt}"
+        # === [محدث] دمج تعليمات النظام الصارمة في الطلب ===
+        system_prompt = get_system_prompt()
+        full_prompt = f"[تعليمات النظام]:\n{system_prompt}\n\n[سياق سابق]:\n{history_text}\n\n[السؤال]:\n{prompt}"
         
         contents = [full_prompt]
         if st.session_state.get('context_file'):
@@ -127,19 +164,30 @@ def handle_text_input(prompt):
             
             for chunk in call_gemini_stream(client, contents):
                 full_response += chunk
+                
+                # === [جديد] فلترة فورية أثناء البث ===
+                # نتحقق من الرد المتراكم حتى الآن
+                sanitized_check = sanitize_response(full_response)
+                if "أعتذر، لا يمكنني" in sanitized_check:
+                    full_response = sanitized_check
+                    placeholder.markdown(full_response)
+                    break # إيقاف البث فوراً عند اكتشاف مخالفة
+                
                 placeholder.markdown(full_response + "▌")
             
-            placeholder.markdown(full_response)
+            # فلترة نهائية للرد كاملاً قبل الحفظ والعرض
+            final_sanitized = sanitize_response(full_response)
+            placeholder.markdown(final_sanitized)
             
             st.session_state.chat_history.append({
-                'role': 'assistant', 'content': full_response
+                'role': 'assistant', 'content': final_sanitized
             })
             
             col1, col2 = st.columns([1, 4])
             with col1:
                 st.download_button(
                     label="📥 تحميل الرد",
-                    data=full_response.encode('utf-8'),
+                    data=final_sanitized.encode('utf-8'),
                     file_name=f"HYDROMEM_Response_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                     mime="text/plain",
                     key=f"dl_{datetime.now().timestamp()}"
@@ -213,4 +261,5 @@ def chat_page():
     - 🧠 **الذاكرة:** يتذكر سياق المحادثة.
     - ⚡ **البث المباشر:** الرد يظهر حرفاً بحرف.
     - 🔄 **التجاوز التلقائي:** يحاول 5 نماذج × 3 مرات = 15 محاولة قبل إظهار الخطأ.
+    - 🔒 **الحماية:** نظام صارم يمنع تسريب الأكواد أو البنية التحتية.
     """)
