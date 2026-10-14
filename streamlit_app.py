@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v14.0
+HYDROMEM Dynamics AI v15.0 (Hybrid Edition)
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 14.0 — Full Platform with Chat AI
+Version 15.0 — Full Platform + Hybrid Chat/Sliders Integration
 ============================================================
 """
 
@@ -66,6 +66,8 @@ st.markdown("""
     .main { direction: rtl; text-align: right; }
     .stMetric { direction: rtl; }
     h1, h2, h3, h4 { direction: rtl; text-align: right; }
+    /* تنسيق دردشة الدمج */
+    .chat-container { margin-top: 20px; border-top: 2px solid #667eea; padding-top: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,39 +111,105 @@ def healing_stage(C, Cm):
 
 
 # ============================================================
-#                  النماذج الرياضية
+#              [جديد] دالة لتهيئة قيم المحاكاة في الذاكرة
 # ============================================================
 
-def general(y, t, mu, k, b, g):
-    A, T = y
-    return [mu*A - A**3 - k*T*A, b*(A-T) - g*T]
+def init_simulation_state():
+    """تهيئة قيم الأشرطة الافتراضية لجميع التطبيقات لضمان التحكم البرمجي"""
+    defaults = {
+        # General Model
+        'gen_A0': 0.5, 'gen_T0': 0.2, 'gen_mu': 1.0, 'gen_k': 0.5, 'gen_b': 0.8, 'gen_g': 0.3, 'gen_te': 50,
+        # Knee
+        'knee_yrs': 10, 'knee_kp': 0.005, 'knee_kd': 0.015, 'knee_a': 0.00010,
+        # Bone
+        'bone_wk': 16, 'bone_km': 0.3, 'bone_mu': 2.0, 'bone_Cm': 20.0,
+        # Disc
+        'disc_h': 24, 'disc_ks': 0.1, 'disc_kd': 0.05, 'disc_pl': 0.5,
+        # Wound
+        'wound_wk': 12, 'wound_scenario': "Normal (طبيعي)",
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
-def cartilage(y, t, kp, kd, a, ms):
-    c, m = y
-    return [kp - kd*c, -a*(c/ms)*m]
+init_simulation_state()
 
-def bone(y, t, k, mu, Cm, C_floor=0.0):
-    Ca, m, C = y
-    dCa = 0.5*(1 - Ca/5)
-    dm = k*max(mu-1, 0)*(1-m)
-    dC = 0.5*(Cm*m**1.5 - C)
-    if C < C_floor:
-        dC = max(dC, 0)
-    return [dCa, dm, dC]
 
-def disc(y, t, ks, kd, Pl):
-    w, h, P = y
-    return [ks*(1-w) - kd*w*Pl, 0.05*(w-0.5)*(1.5-h), 0.3*(w-0.6) - 0.1*P]
+# ============================================================
+#              [جديد] دالة معالجة طلبات الدردشة (NLP محاكاة)
+# ============================================================
 
-def wound(y, t, p):
-    E, F, C, I, B, M = y
-    E, F, C = max(E,0), max(F,0), max(C,0)
-    return [p['ke']*E*(1-E) - p['ka']*E*I,
-            p['kf']*F*(1-F) - p['kd']*F*I,
-            p['kc']*F*(1-C) - p['kr']*C*M,
-            p['ki']*B - p['kii']*I,
-            p['kb']*(1-B) - p['kbb']*B*E,
-            p['km']*I - p['kmm']*M*0.8]
+def process_chat_command(user_input, app_name):
+    """
+    تستقبل نص المستخدم، تستخرج الأرقام (محاكاة لـ Function Calling)،
+    ثم تحدث قيم الأشرطة في st.session_state
+    """
+    import re
+    updated = False
+    msg_lower = user_input.lower()
+    
+    # استخراج الأرقام من النص
+    numbers = [float(s) for s in re.findall(r"[-+]?\d*\.\d+|\d+", user_input)]
+    
+    if app_name == "🦴 التئام العظام":
+        if "أسبوع" in user_input or "اسبوع" in user_input:
+            if numbers:
+                st.session_state.bone_wk = int(numbers[0])
+                updated = True
+        if "تمعدن" in user_input or "معدل" in user_input:
+            if len(numbers) > 0:
+                st.session_state.bone_km = min(max(numbers[0], 0.05), 0.5)
+                updated = True
+        if "نمو" in user_input or "معامل" in user_input:
+            if len(numbers) > 0:
+                st.session_state.bone_mu = min(max(numbers[0], 1.1), 3.0)
+                updated = True
+        if "صلابة" in user_input or "قصوى" in user_input:
+            if len(numbers) > 0:
+                st.session_state.bone_Cm = min(max(numbers[0], 10.0), 30.0)
+                updated = True
+
+    elif app_name == "🦵 خشونة الركبة":
+        if "سنة" in user_input or "سنوات" in user_input:
+            if numbers:
+                st.session_state.knee_yrs = int(numbers[0])
+                updated = True
+        if "إنتاج" in user_input or "انتاج" in user_input:
+            if numbers:
+                st.session_state.knee_kp = min(max(numbers[0], 0.003), 0.012)
+                updated = True
+
+    elif app_name == "💧 الأقراص الفقرية":
+        if "ساعة" in user_input or "ساعات" in user_input:
+            if numbers:
+                st.session_state.disc_h = int(numbers[0])
+                updated = True
+        if "حمل" in user_input:
+            if numbers:
+                st.session_state.disc_pl = min(max(numbers[0], 0.2), 1.0)
+                updated = True
+
+    elif app_name == "🩹 التئام الجروح":
+        if "أسبوع" in user_input or "اسبوع" in user_input:
+            if numbers:
+                st.session_state.wound_wk = int(numbers[0])
+                updated = True
+        if "مصاب" in user_input or "عدوى" in user_input:
+            st.session_state.wound_scenario = "Infected (مصاب)"
+            updated = True
+        elif "سريع" in user_input:
+            st.session_state.wound_scenario = "Fast (سريع)"
+            updated = True
+        elif "طبيعي" in user_input:
+            st.session_state.wound_scenario = "Normal (طبيعي)"
+            updated = True
+
+    elif app_name == "⚙️ النموذج الديناميكي العام":
+        if "زمن" in user_input and numbers:
+            st.session_state.gen_te = int(numbers[0])
+            updated = True
+
+    return updated, f"تم تحديث المعاملات بناءً على طلبك: '{user_input}'. جاري إعادة المحاكاة..."
 
 
 # ============================================================
@@ -638,7 +706,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 14.0")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.0")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
@@ -693,13 +761,14 @@ elif app == "⚙️ النموذج الديناميكي العام":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        A0 = st.slider("A₀", 0.0, 2.0, 0.5, 0.1)
-        T0 = st.slider("Θ₀", 0.0, 2.0, 0.2, 0.1)
-        mu = st.slider("μ", 0.1, 2.0, 1.0, 0.1)
-        k  = st.slider("κ", 0.0, 2.0, 0.5, 0.1)
-        b  = st.slider("β", 0.1, 2.0, 0.8, 0.1)
-        g  = st.slider("γ", 0.0, 1.0, 0.3, 0.05)
-        te = st.slider("الزمن", 10, 200, 50)
+        # === [جديد] ربط الأشرطة بالذاكرة ===
+        A0 = st.slider("A₀", 0.0, 2.0, 0.5, 0.1, key='gen_A0')
+        T0 = st.slider("Θ₀", 0.0, 2.0, 0.2, 0.1, key='gen_T0')
+        mu = st.slider("μ", 0.1, 2.0, 1.0, 0.1, key='gen_mu')
+        k  = st.slider("κ", 0.0, 2.0, 0.5, 0.1, key='gen_k')
+        b  = st.slider("β", 0.1, 2.0, 0.8, 0.1, key='gen_b')
+        g  = st.slider("γ", 0.0, 1.0, 0.3, 0.05, key='gen_g')
+        te = st.slider("الزمن", 10, 200, 50, key='gen_te')
     with c2:
         t = np.linspace(0, te, 500)
         s = odeint(general, [A0, T0], t, args=(mu, k, b, g))
@@ -715,6 +784,28 @@ elif app == "⚙️ النموذج الديناميكي العام":
     c2.metric("Θ النهائي", f"{s[-1,1]:.6f}")
     c3.metric("A الأقصى", f"{s[:,0].max():.6f}")
     c4.metric("Θ الأقصى", f"{s[:,1].max():.6f}")
+    
+    # === [جديد] إضافة الدردشة أسفل التطبيق ===
+    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
+    st.subheader("💬 دردشة التحكم السريع (HYDROMEM Hybrid Chat)")
+    st.info("💡 يمكنك كتابة طلبك هنا لتعديل الأشرطة تلقائياً. مثال: 'غير الزمن إلى 100' أو 'ارفع معامل النمو إلى 1.5'")
+    
+    if "gen_chat" not in st.session_state:
+        st.session_state.gen_chat = [{"role": "assistant", "content": "مرحباً! أنا مساعدك الذكي. كيف يمكنني مساعدتك في تعديل المحاكاة؟"}]
+    
+    for msg in st.session_state.gen_chat:
+        st.chat_message(msg["role"]).write(msg["content"])
+        
+    if prompt := st.chat_input("اكتب طلبك هنا...", key="gen_chat_input"):
+        st.session_state.gen_chat.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
+        
+        updated, response_msg = process_chat_command(prompt, app)
+        st.session_state.gen_chat.append({"role": "assistant", "content": response_msg})
+        st.chat_message("assistant").write(response_msg)
+        
+        if updated:
+            st.rerun() # إعادة تشغيل الواجهة لتحديث الأشرطة والرسومات
     use_trial()
 
 
@@ -723,10 +814,11 @@ elif app == "🦵 خشونة الركبة":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        yrs = st.slider("عدد السنوات", 1, 25, 10)
-        kp = st.slider("معدل إنتاج MMP", 0.003, 0.012, 0.005, 0.001)
-        kd = st.slider("معدل التحلل", 0.008, 0.025, 0.015, 0.001)
-        a  = st.slider("معامل التلف", 0.00005, 0.0004, 0.00010, 0.00005)
+        # === [جديد] ربط الأشرطة بالذاكرة ===
+        yrs = st.slider("عدد السنوات", 1, 25, 10, key='knee_yrs')
+        kp = st.slider("معدل إنتاج MMP", 0.003, 0.012, 0.005, 0.001, key='knee_kp')
+        kd = st.slider("معدل التحلل", 0.008, 0.025, 0.015, 0.001, key='knee_kd')
+        a  = st.slider("معامل التلف", 0.00005, 0.0004, 0.00010, 0.00005, key='knee_a')
     with c2:
         t = np.linspace(0, yrs*365, 1000)
         s = odeint(cartilage, [0, 1.0], t, args=(kp, kd, a, 0.5))
@@ -769,6 +861,21 @@ elif app == "🦵 خشونة الركبة":
         rec = {"نمط الحياة": ["تمارين وقائية", "وزن صحي"],
                "المتابعة": ["زيارة طبيب سنوياً"]}
     generate_report("خشونة الركبة", results, timeline, rec)
+    
+    # === [جديد] إضافة الدردشة ===
+    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
+    st.subheader("💬 دردشة التحكم السريع")
+    if "knee_chat" not in st.session_state:
+        st.session_state.knee_chat = [{"role": "assistant", "content": "مرحباً! اكتب طلبك لتعديل المحاكاة (مثال: 'غير السنوات إلى 15')"}]
+    for msg in st.session_state.knee_chat:
+        st.chat_message(msg["role"]).write(msg["content"])
+    if prompt := st.chat_input("اكتب طلبك...", key="knee_chat_input"):
+        st.session_state.knee_chat.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
+        updated, response_msg = process_chat_command(prompt, app)
+        st.session_state.knee_chat.append({"role": "assistant", "content": response_msg})
+        st.chat_message("assistant").write(response_msg)
+        if updated: st.rerun()
     use_trial()
 
 
@@ -777,10 +884,11 @@ elif app == "🦴 التئام العظام":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        wk = st.slider("عدد الأسابيع", 4, 24, 16)
-        km = st.slider("معدل التمعدن", 0.05, 0.5, 0.3, 0.05)
-        mu = st.slider("معامل النمو", 1.1, 3.0, 2.0, 0.1)
-        Cm = st.slider("الصلابة القصوى", 10.0, 30.0, 20.0, 1.0)
+        # === [جديد] ربط الأشرطة بالذاكرة ===
+        wk = st.slider("عدد الأسابيع", 4, 24, 16, key='bone_wk')
+        km = st.slider("معدل التمعدن", 0.05, 0.5, 0.3, 0.05, key='bone_km')
+        mu = st.slider("معامل النمو", 1.1, 3.0, 2.0, 0.1, key='bone_mu')
+        Cm = st.slider("الصلابة القصوى", 10.0, 30.0, 20.0, 1.0, key='bone_Cm')
     with c2:
         t = np.linspace(0, wk*7, 500)
         s = odeint(bone, [0,0,0], t, args=(km, mu, Cm))
@@ -815,6 +923,22 @@ elif app == "🦴 التئام العظام":
     rec = {"الحالة": ["الالتئام يسير بشكل جيد" if C/Cm > 0.5 else "يحتاج متابعة"],
            "المتابعة": ["زيارة طبيب العظام"]}
     generate_report("التئام العظام", results, timeline, rec)
+    
+    # === [جديد] إضافة الدردشة ===
+    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
+    st.subheader("💬 دردشة التحكم السريع")
+    st.info("💡 مثال: 'حاكي التئام العظام لمدة 20 أسبوعاً بمعدل تمعدن 0.4 وصلابة قصوى 25'")
+    if "bone_chat" not in st.session_state:
+        st.session_state.bone_chat = [{"role": "assistant", "content": "مرحباً! أنا جاهز لتعديل محاكاة العظام. ماذا تريد أن تغير؟"}]
+    for msg in st.session_state.bone_chat:
+        st.chat_message(msg["role"]).write(msg["content"])
+    if prompt := st.chat_input("اكتب طلبك...", key="bone_chat_input"):
+        st.session_state.bone_chat.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
+        updated, response_msg = process_chat_command(prompt, app)
+        st.session_state.bone_chat.append({"role": "assistant", "content": response_msg})
+        st.chat_message("assistant").write(response_msg)
+        if updated: st.rerun()
     use_trial()
 
 
@@ -823,10 +947,11 @@ elif app == "💧 الأقراص الفقرية":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        h = st.slider("عدد الساعات", 6, 48, 24)
-        ks = st.slider("معدل الانتفاخ", 0.05, 0.2, 0.1, 0.01)
-        kd = st.slider("معدل التحلل", 0.02, 0.1, 0.05, 0.01)
-        pl = st.slider("الحمل", 0.2, 1.0, 0.5, 0.1)
+        # === [جديد] ربط الأشرطة بالذاكرة ===
+        h = st.slider("عدد الساعات", 6, 48, 24, key='disc_h')
+        ks = st.slider("معدل الانتفاخ", 0.05, 0.2, 0.1, 0.01, key='disc_ks')
+        kd = st.slider("معدل التحلل", 0.02, 0.1, 0.05, 0.01, key='disc_kd')
+        pl = st.slider("الحمل", 0.2, 1.0, 0.5, 0.1, key='disc_pl')
     with c2:
         t = np.linspace(0, h, 500)
         s = odeint(disc, [0.5, 1.0, 0.3], t, args=(ks, kd, pl))
@@ -861,6 +986,21 @@ elif app == "💧 الأقراص الفقرية":
     rec = {"نمط الحياة": ["تجنب الجلوس الطويل", "تمارين تمدد"],
            "المتابعة": ["طبيب عمود فقري عند استمرار الألم"]}
     generate_report("الأقراص الفقرية", results, timeline, rec)
+    
+    # === [جديد] إضافة الدردشة ===
+    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
+    st.subheader("💬 دردشة التحكم السريع")
+    if "disc_chat" not in st.session_state:
+        st.session_state.disc_chat = [{"role": "assistant", "content": "مرحباً! يمكنك طلب تعديل الساعات أو الحمل هنا."}]
+    for msg in st.session_state.disc_chat:
+        st.chat_message(msg["role"]).write(msg["content"])
+    if prompt := st.chat_input("اكتب طلبك...", key="disc_chat_input"):
+        st.session_state.disc_chat.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
+        updated, response_msg = process_chat_command(prompt, app)
+        st.session_state.disc_chat.append({"role": "assistant", "content": response_msg})
+        st.chat_message("assistant").write(response_msg)
+        if updated: st.rerun()
     use_trial()
 
 
@@ -869,8 +1009,9 @@ elif app == "🩹 التئام الجروح":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        wk = st.slider("عدد الأسابيع", 4, 16, 12)
-        scenario = st.selectbox("السيناريو", ["Normal (طبيعي)", "Infected (مصاب)", "Fast (سريع)"])
+        # === [جديد] ربط الأشرطة بالذاكرة ===
+        wk = st.slider("عدد الأسابيع", 4, 16, 12, key='wound_wk')
+        scenario = st.selectbox("السيناريو", ["Normal (طبيعي)", "Infected (مصاب)", "Fast (سريع)"], key='wound_scenario')
         if "Normal" in scenario:
             p = {'ke':1.2,'ka':0.15,'kf':1.0,'kd':0.10,'kc':1.0,'kr':0.20,
                  'ki':0.5,'kii':0.6,'kb':0.2,'kbb':0.8,'km':0.3,'kmm':0.5}
@@ -925,6 +1066,21 @@ elif app == "🩹 التئام الجروح":
         rec = {"العناية": ["تنظيف الجرح", "تغيير الضمادة"],
                "التغذية": ["بروتين", "فيتامين C"]}
     generate_report("التئام الجروح", results, timeline, rec)
+    
+    # === [جديد] إضافة الدردشة ===
+    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
+    st.subheader("💬 دردشة التحكم السريع")
+    if "wound_chat" not in st.session_state:
+        st.session_state.wound_chat = [{"role": "assistant", "content": "مرحباً! يمكنك تغيير السيناريو (طبيعي/مصاب/سريع) أو عدد الأسابيع هنا."}]
+    for msg in st.session_state.wound_chat:
+        st.chat_message(msg["role"]).write(msg["content"])
+    if prompt := st.chat_input("اكتب طلبك...", key="wound_chat_input"):
+        st.session_state.wound_chat.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
+        updated, response_msg = process_chat_command(prompt, app)
+        st.session_state.wound_chat.append({"role": "assistant", "content": response_msg})
+        st.chat_message("assistant").write(response_msg)
+        if updated: st.rerun()
     use_trial()
 
 
@@ -979,7 +1135,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 14.0 | "
+    "**HYDROMEM Dynamics AI** — الإصدار 15.0 (Hybrid Edition) | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
