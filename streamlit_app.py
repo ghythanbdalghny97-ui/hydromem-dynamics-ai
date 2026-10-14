@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v13.0
+HYDROMEM Dynamics AI v14.0
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 13.0 — Full Platform with Chat AI
+Version 14.0 — Full Platform with Chat AI
 ============================================================
 """
 
@@ -638,7 +638,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 13.0")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 14.0")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
@@ -979,7 +979,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 13.0 | "
+    "**HYDROMEM Dynamics AI** — الإصدار 14.0 | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
