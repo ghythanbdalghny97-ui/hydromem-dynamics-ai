@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v15.3 (Final Stable Edition)
+HYDROMEM Dynamics AI v15.4 (Final Stable Edition)
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 15.3 — Full Platform + Word-Based Smart NLP
+Version 15.4 — Full Platform + Word-Based Smart NLP (No Overwrite)
 ============================================================
 """
 
@@ -153,6 +153,7 @@ def smart_extract_number(text, keywords, previous_value=None):
     """
     محرك استخراج ذكي يعتمد على تقسيم النص إلى كلمات.
     يبحث عن الرقم الأقرب للكلمة المفتاحية (بعدها أولاً، ثم قبلها).
+    إذا لم يجد الكلمة المفتاحية في النص، يرجع None (لا تغيير).
     """
     import re
     
@@ -182,11 +183,7 @@ def smart_extract_number(text, keywords, previous_value=None):
                     if m:
                         return float(m.group())
     
-    # خيار احتياطي: إذا كان هناك رقم واحد فقط في النص كاملاً
-    all_nums = re.findall(r'\d+(?:\.\d+)?', text)
-    if len(all_nums) == 1:
-        return float(all_nums[0])
-    
+    # === لا يوجد أي تغيير إذا لم يجد الكلمة المفتاحية ===
     return None
 
 
@@ -831,7 +828,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.3")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.4")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
@@ -1250,7 +1247,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 15.3 (Final Stable Edition) | "
+    "**HYDROMEM Dynamics AI** — الإصدار 15.4 (Final Stable Edition) | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
