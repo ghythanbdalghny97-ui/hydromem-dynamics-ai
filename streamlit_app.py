@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v15.1 (Hybrid Edition - Fixed)
+HYDROMEM Dynamics AI v15.1 (Smart Hybrid Edition)
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 15.1 — Full Platform + Hybrid Chat/Sliders Integration
+Version 15.1 — Full Platform + Smart Hybrid Chat/Sliders
 ============================================================
 """
 
@@ -110,7 +110,7 @@ def healing_stage(C, Cm):
 
 
 # ============================================================
-#              [جديد] دالة لتهيئة قيم المحاكاة في الذاكرة
+#              إدارة الحالة والتحكم البرمجي
 # ============================================================
 
 def init_simulation_state():
@@ -128,10 +128,6 @@ def init_simulation_state():
 
 init_simulation_state()
 
-
-# ============================================================
-#              [جديد] تطبيق التعديلات القادمة من الدردشة قبل رسم الأشرطة
-# ============================================================
 
 def apply_simulation_overrides():
     """تطبيق القيم المطلوبة من الدردشة قبل إنشاء الأشرطة لتجنب خطأ Streamlit"""
@@ -152,60 +148,74 @@ apply_simulation_overrides()
 
 
 # ============================================================
-#              [جديد] دالة معالجة طلبات الدردشة (NLP محاكاة)
+#              معالجة طلبات الدردشة الذكية (Smart NLP)
 # ============================================================
 
 def process_chat_command(user_input, app_name):
     """
-    تستقبل نص المستخدم، تستخرج الأرقام، وتضع القيم في متغيرات مؤقتة (Override)
+    تستقبل نص المستخدم، تستخرج الأرقام المرتبطة بكل كلمة مفتاحية،
+    وتضع القيم في متغيرات مؤقتة (Override).
     """
     import re
     updated = False
-    numbers = [float(s) for s in re.findall(r"[-+]?\d*\.\d+|\d+", user_input)]
     
+    def get_number_near_keyword(text, keywords):
+        """دالة مساعدة تبحث عن الرقم القريب من الكلمة المفتاحية"""
+        for kw in keywords:
+            pos = text.find(kw)
+            if pos != -1:
+                match = re.search(r"[-+]?\d*\.\d+|\d+", text[pos:])
+                if match:
+                    return float(match.group())
+        return None
+
     if app_name == "🦴 التئام العظام":
-        if "أسبوع" in user_input or "اسبوع" in user_input:
-            if numbers:
-                st.session_state.bone_wk_override = int(numbers[0])
-                updated = True
-        if "تمعدن" in user_input or "معدل" in user_input:
-            if len(numbers) > 0:
-                st.session_state.bone_km_override = min(max(numbers[0], 0.05), 0.5)
-                updated = True
-        if "نمو" in user_input or "معامل" in user_input:
-            if len(numbers) > 0:
-                st.session_state.bone_mu_override = min(max(numbers[0], 1.1), 3.0)
-                updated = True
-        if "صلابة" in user_input or "قصوى" in user_input:
-            if len(numbers) > 0:
-                st.session_state.bone_Cm_override = min(max(numbers[0], 10.0), 30.0)
-                updated = True
+        val = get_number_near_keyword(user_input, ["أسبوع", "اسبوع"])
+        if val is not None:
+            st.session_state.bone_wk_override = int(val)
+            updated = True
+            
+        val = get_number_near_keyword(user_input, ["تمعدن", "معدل"])
+        if val is not None:
+            st.session_state.bone_km_override = min(max(val, 0.05), 0.5)
+            updated = True
+            
+        val = get_number_near_keyword(user_input, ["نمو", "معامل"])
+        if val is not None:
+            st.session_state.bone_mu_override = min(max(val, 1.1), 3.0)
+            updated = True
+            
+        val = get_number_near_keyword(user_input, ["صلابة", "قصوى", "ثبات"])
+        if val is not None:
+            st.session_state.bone_Cm_override = min(max(val, 10.0), 30.0)
+            updated = True
 
     elif app_name == "🦵 خشونة الركبة":
-        if "سنة" in user_input or "سنوات" in user_input:
-            if numbers:
-                st.session_state.knee_yrs_override = int(numbers[0])
-                updated = True
-        if "إنتاج" in user_input or "انتاج" in user_input:
-            if numbers:
-                st.session_state.knee_kp_override = min(max(numbers[0], 0.003), 0.012)
-                updated = True
+        val = get_number_near_keyword(user_input, ["سنة", "سنوات"])
+        if val is not None:
+            st.session_state.knee_yrs_override = int(val)
+            updated = True
+        val = get_number_near_keyword(user_input, ["إنتاج", "انتاج"])
+        if val is not None:
+            st.session_state.knee_kp_override = min(max(val, 0.003), 0.012)
+            updated = True
 
     elif app_name == "💧 الأقراص الفقرية":
-        if "ساعة" in user_input or "ساعات" in user_input:
-            if numbers:
-                st.session_state.disc_h_override = int(numbers[0])
-                updated = True
-        if "حمل" in user_input:
-            if numbers:
-                st.session_state.disc_pl_override = min(max(numbers[0], 0.2), 1.0)
-                updated = True
+        val = get_number_near_keyword(user_input, ["ساعة", "ساعات"])
+        if val is not None:
+            st.session_state.disc_h_override = int(val)
+            updated = True
+        val = get_number_near_keyword(user_input, ["حمل"])
+        if val is not None:
+            st.session_state.disc_pl_override = min(max(val, 0.2), 1.0)
+            updated = True
 
     elif app_name == "🩹 التئام الجروح":
-        if "أسبوع" in user_input or "اسبوع" in user_input:
-            if numbers:
-                st.session_state.wound_wk_override = int(numbers[0])
-                updated = True
+        val = get_number_near_keyword(user_input, ["أسبوع", "اسبوع"])
+        if val is not None:
+            st.session_state.wound_wk_override = int(val)
+            updated = True
+            
         if "مصاب" in user_input or "عدوى" in user_input:
             st.session_state.wound_scenario_override = "Infected (مصاب)"
             updated = True
@@ -217,8 +227,9 @@ def process_chat_command(user_input, app_name):
             updated = True
 
     elif app_name == "⚙️ النموذج الديناميكي العام":
-        if "زمن" in user_input and numbers:
-            st.session_state.gen_te_override = int(numbers[0])
+        val = get_number_near_keyword(user_input, ["زمن"])
+        if val is not None:
+            st.session_state.gen_te_override = int(val)
             updated = True
 
     if updated:
@@ -404,7 +415,7 @@ def train_regressor():
 
 
 # ============================================================
-#              نظام التسعير (الأسعار المحدثة)
+#              نظام التسعير
 # ============================================================
 
 PLANS = {
@@ -1176,7 +1187,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 15.1 (Hybrid Edition - Fixed) | "
+    "**HYDROMEM Dynamics AI** — الإصدار 15.1 (Smart Hybrid Edition) | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
