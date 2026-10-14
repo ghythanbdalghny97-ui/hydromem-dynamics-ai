@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v15.1 (Smart Hybrid Edition - Armored)
+HYDROMEM Dynamics AI v15.2 (Smart Hybrid - Multi-Retry)
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 15.1 — Full Platform + Smart Hybrid Chat/Sliders
+Version 15.2 — Full Platform + Smart NLP + Multi-Strategy Extraction
 ============================================================
 """
 
@@ -146,114 +146,183 @@ apply_simulation_overrides()
 
 
 # ============================================================
-#              معالجة طلبات الدردشة الذكية (Smart NLP Armored)
+#              محرك استخراج الأرقام الذكي (5 استراتيجيات)
 # ============================================================
+
+def smart_extract_number(text, keywords, previous_value=None):
+    """
+    محرك استخراج ذكي متعدد الاستراتيجيات:
+    - الاستراتيجية 1: Regex دقيق (رقم ملاصق للكلمة)
+    - الاستراتيجية 2: Regex مع مسافات (رقم + مسافة + كلمة)
+    - الاستراتيجية 3: التقارب الموضعي (أقرب رقم للكلمة)
+    - الاستراتيجية 4: إذا كان هناك رقم واحد فقط في النص، استخدمه
+    - الاستراتيجية 5: إذا فشل كل شيء، أعد القيمة السابقة (لا تغيير)
+    """
+    import re
+    
+    # تحويل الأرقام العربية إلى إنجليزية
+    arabic_to_english = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'}
+    for ar, en in arabic_to_english.items():
+        text = text.replace(ar, en)
+    
+    # جمع كل الأرقام في النص مع مواقعها
+    all_numbers = [(m.start(), m.end(), float(m.group())) for m in re.finditer(r"\d+(?:\.\d+)?", text)]
+    
+    if not all_numbers:
+        return None  # لا يوجد أرقام
+    
+    # محاولة البحث عن الكلمة المفتاحية
+    for kw in keywords:
+        kw_pos = text.find(kw)
+        if kw_pos == -1:
+            continue
+        
+        # === الاستراتيجية 1 & 2: Regex دقيق (رقم قبل الكلمة أو بعدها) ===
+        # قبل الكلمة
+        pattern_before = r"(\d+(?:\.\d+)?)\s*" + re.escape(kw)
+        match = re.search(pattern_before, text)
+        if match:
+            return float(match.group(1))
+        
+        # بعد الكلمة
+        pattern_after = re.escape(kw) + r"\s*(\d+(?:\.\d+)?)"
+        match = re.search(pattern_after, text)
+        if match:
+            return float(match.group(1))
+        
+        # === الاستراتيجية 3: التقارب الموضعي (الأقرب للكلمة) ===
+        best_num = None
+        best_distance = float('inf')
+        for start, end, val in all_numbers:
+            if end <= kw_pos:
+                distance = kw_pos - end  # الرقم قبل الكلمة
+            else:
+                distance = start - (kw_pos + len(kw))  # الرقم بعد الكلمة
+            
+            if 0 <= distance < best_distance:
+                best_distance = distance
+                best_num = val
+        
+        if best_num is not None and best_distance < 40:
+            return best_num
+    
+    # === الاستراتيجية 4: إذا كان هناك رقم واحد فقط في النص كاملاً ===
+    if len(all_numbers) == 1:
+        return all_numbers[0][2]
+    
+    # === الاستراتيجية 5: فشل كل شيء ===
+    return None
+
 
 def process_chat_command(user_input, app_name):
     """
-    تستقبل نص المستخدم، تستخرج الأرقام المرتبطة بكل كلمة مفتاحية،
-    وتضع القيم في متغيرات مؤقتة (Override) مع التأكد من الحدود المسموحة.
+    معالجة طلبات الدردشة مع نظام Retry متعدد الاستراتيجيات.
     """
-    import re
     updated = False
     msg_extra = ""
-
-    def get_number_near_keyword(text, keywords):
-        for kw in keywords:
-            pos = text.find(kw)
-            if pos != -1:
-                match = re.search(r"[-+]?\d*\.\d+|\d+", text[pos:])
-                if match:
-                    return float(match.group())
-        return None
+    details = []
 
     if app_name == "🦴 التئام العظام":
-        val = get_number_near_keyword(user_input, ["أسبوع", "اسبوع"])
+        val = smart_extract_number(user_input, ["أسبوع", "اسبوع", "أسابيع"], st.session_state.get('bone_wk'))
         if val is not None:
             safe = min(max(int(val), 4), 24)
-            if safe != int(val): msg_extra += f" (تم ضبط الأسابيع إلى {safe}، الحد المسموح 4-24)"
+            if safe != int(val): msg_extra += f" (ضُبط إلى {safe})"
             st.session_state.bone_wk_override = safe
+            details.append(f"أسابيع={safe}")
             updated = True
             
-        val = get_number_near_keyword(user_input, ["تمعدن", "معدل"])
+        val = smart_extract_number(user_input, ["تمعدن"], st.session_state.get('bone_km'))
         if val is not None:
             safe = min(max(val, 0.05), 0.5)
-            if safe != val: msg_extra += f" (تم ضبط التمعدن إلى {safe}، الحد المسموح 0.05-0.5)"
+            if safe != val: msg_extra += f" (تمعدن ضُبط إلى {safe})"
             st.session_state.bone_km_override = safe
+            details.append(f"تمعدن={safe}")
             updated = True
             
-        val = get_number_near_keyword(user_input, ["نمو", "معامل"])
+        val = smart_extract_number(user_input, ["نمو"], st.session_state.get('bone_mu'))
         if val is not None:
             safe = min(max(val, 1.1), 3.0)
-            if safe != val: msg_extra += f" (تم ضبط النمو إلى {safe}، الحد المسموح 1.1-3.0)"
+            if safe != val: msg_extra += f" (نمو ضُبط إلى {safe})"
             st.session_state.bone_mu_override = safe
+            details.append(f"نمو={safe}")
             updated = True
             
-        val = get_number_near_keyword(user_input, ["صلابة", "قصوى", "ثبات"])
+        val = smart_extract_number(user_input, ["صلابة", "قصوى", "ثبات"], st.session_state.get('bone_Cm'))
         if val is not None:
             safe = min(max(val, 10.0), 30.0)
-            if safe != val: msg_extra += f" (تم ضبط الصلابة إلى {safe}، الحد المسموح 10-30)"
+            if safe != val: msg_extra += f" (صلابة ضُبطت إلى {safe})"
             st.session_state.bone_Cm_override = safe
+            details.append(f"صلابة={safe}")
             updated = True
 
     elif app_name == "🦵 خشونة الركبة":
-        val = get_number_near_keyword(user_input, ["سنة", "سنوات"])
+        val = smart_extract_number(user_input, ["سنة", "سنوات"], st.session_state.get('knee_yrs'))
         if val is not None:
             safe = min(max(int(val), 1), 25)
-            if safe != int(val): msg_extra += f" (تم ضبط السنوات إلى {safe}، الحد المسموح 1-25)"
+            if safe != int(val): msg_extra += f" (سنوات ضُبطت إلى {safe})"
             st.session_state.knee_yrs_override = safe
+            details.append(f"سنوات={safe}")
             updated = True
-        val = get_number_near_keyword(user_input, ["إنتاج", "انتاج"])
+        val = smart_extract_number(user_input, ["إنتاج", "انتاج"], st.session_state.get('knee_kp'))
         if val is not None:
             safe = min(max(val, 0.003), 0.012)
-            if safe != val: msg_extra += f" (تم ضبط إنتاج MMP إلى {safe})"
+            if safe != val: msg_extra += f" (إنتاج MMP ضُبط إلى {safe})"
             st.session_state.knee_kp_override = safe
+            details.append(f"إنتاج={safe}")
             updated = True
 
     elif app_name == "💧 الأقراص الفقرية":
-        val = get_number_near_keyword(user_input, ["ساعة", "ساعات"])
+        val = smart_extract_number(user_input, ["ساعة", "ساعات"], st.session_state.get('disc_h'))
         if val is not None:
             safe = min(max(int(val), 6), 48)
-            if safe != int(val): msg_extra += f" (تم ضبط الساعات إلى {safe}، الحد المسموح 6-48)"
+            if safe != int(val): msg_extra += f" (ساعات ضُبطت إلى {safe})"
             st.session_state.disc_h_override = safe
+            details.append(f"ساعات={safe}")
             updated = True
-        val = get_number_near_keyword(user_input, ["حمل"])
+        val = smart_extract_number(user_input, ["حمل"], st.session_state.get('disc_pl'))
         if val is not None:
             safe = min(max(val, 0.2), 1.0)
-            if safe != val: msg_extra += f" (تم ضبط الحمل إلى {safe})"
+            if safe != val: msg_extra += f" (حمل ضُبط إلى {safe})"
             st.session_state.disc_pl_override = safe
+            details.append(f"حمل={safe}")
             updated = True
 
     elif app_name == "🩹 التئام الجروح":
-        val = get_number_near_keyword(user_input, ["أسبوع", "اسبوع"])
+        val = smart_extract_number(user_input, ["أسبوع", "اسبوع"], st.session_state.get('wound_wk'))
         if val is not None:
             safe = min(max(int(val), 4), 16)
-            if safe != int(val): msg_extra += f" (تم ضبط الأسابيع إلى {safe}، الحد المسموح 4-16)"
+            if safe != int(val): msg_extra += f" (أسابيع ضُبطت إلى {safe})"
             st.session_state.wound_wk_override = safe
+            details.append(f"أسابيع={safe}")
             updated = True
             
         if "مصاب" in user_input or "عدوى" in user_input:
             st.session_state.wound_scenario_override = "Infected (مصاب)"
+            details.append("سيناريو=مصاب")
             updated = True
         elif "سريع" in user_input:
             st.session_state.wound_scenario_override = "Fast (سريع)"
+            details.append("سيناريو=سريع")
             updated = True
         elif "طبيعي" in user_input:
             st.session_state.wound_scenario_override = "Normal (طبيعي)"
+            details.append("سيناريو=طبيعي")
             updated = True
 
     elif app_name == "⚙️ النموذج الديناميكي العام":
-        val = get_number_near_keyword(user_input, ["زمن"])
+        val = smart_extract_number(user_input, ["زمن"], st.session_state.get('gen_te'))
         if val is not None:
             safe = min(max(int(val), 10), 200)
-            if safe != int(val): msg_extra += f" (تم ضبط الزمن إلى {safe}، الحد المسموح 10-200)"
+            if safe != int(val): msg_extra += f" (زمن ضُبط إلى {safe})"
             st.session_state.gen_te_override = safe
+            details.append(f"زمن={safe}")
             updated = True
 
     if updated:
-        return True, f"✅ تم تحديث المعاملات بناءً على طلبك: '{user_input}'.{msg_extra} جاري إعادة المحاكاة..."
+        details_str = " | ".join(details) if details else ""
+        return True, f"✅ تم تحديث المعاملات: {details_str}.{msg_extra} جاري إعادة المحاكاة..."
     else:
-        return False, f"⚠️ عذراً، لم أتعرف على الأمر في سياق هذا التطبيق. يرجى كتابة طلب واضح، مثل: 'غير عدد الأسابيع إلى 12' أو 'ارفع معدل التمعدن إلى 0.4'."
+        return False, "⚠️ عذراً، لم أتمكن من التعرف على الأمر. يرجى كتابة طلب واضح، مثل: 'غير عدد الأسابيع إلى 12' أو 'ارفع معدل التمعدن إلى 0.4'."
 
 
 # ============================================================
@@ -786,7 +855,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.1")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.2")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
@@ -1205,7 +1274,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 15.1 (Smart Hybrid Edition - Armored) | "
+    "**HYDROMEM Dynamics AI** — الإصدار 15.2 (Smart Hybrid - Multi-Retry) | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
