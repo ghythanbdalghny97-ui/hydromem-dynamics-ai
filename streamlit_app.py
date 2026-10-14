@@ -8,7 +8,7 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v15.1 (Smart Hybrid Edition)
+HYDROMEM Dynamics AI v15.1 (Smart Hybrid Edition - Armored)
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
 Version 15.1 — Full Platform + Smart Hybrid Chat/Sliders
 ============================================================
@@ -114,7 +114,6 @@ def healing_stage(C, Cm):
 # ============================================================
 
 def init_simulation_state():
-    """تهيئة قيم الأشرطة الافتراضية لجميع التطبيقات لضمان التحكم البرمجي"""
     defaults = {
         'gen_A0': 0.5, 'gen_T0': 0.2, 'gen_mu': 1.0, 'gen_k': 0.5, 'gen_b': 0.8, 'gen_g': 0.3, 'gen_te': 50,
         'knee_yrs': 10, 'knee_kp': 0.005, 'knee_kd': 0.015, 'knee_a': 0.00010,
@@ -130,7 +129,6 @@ init_simulation_state()
 
 
 def apply_simulation_overrides():
-    """تطبيق القيم المطلوبة من الدردشة قبل إنشاء الأشرطة لتجنب خطأ Streamlit"""
     overrides = {
         'gen_A0', 'gen_T0', 'gen_mu', 'gen_k', 'gen_b', 'gen_g', 'gen_te',
         'knee_yrs', 'knee_kp', 'knee_kd', 'knee_a',
@@ -148,19 +146,19 @@ apply_simulation_overrides()
 
 
 # ============================================================
-#              معالجة طلبات الدردشة الذكية (Smart NLP)
+#              معالجة طلبات الدردشة الذكية (Smart NLP Armored)
 # ============================================================
 
 def process_chat_command(user_input, app_name):
     """
     تستقبل نص المستخدم، تستخرج الأرقام المرتبطة بكل كلمة مفتاحية،
-    وتضع القيم في متغيرات مؤقتة (Override).
+    وتضع القيم في متغيرات مؤقتة (Override) مع التأكد من الحدود المسموحة.
     """
     import re
     updated = False
-    
+    msg_extra = ""
+
     def get_number_near_keyword(text, keywords):
-        """دالة مساعدة تبحث عن الرقم القريب من الكلمة المفتاحية"""
         for kw in keywords:
             pos = text.find(kw)
             if pos != -1:
@@ -172,48 +170,66 @@ def process_chat_command(user_input, app_name):
     if app_name == "🦴 التئام العظام":
         val = get_number_near_keyword(user_input, ["أسبوع", "اسبوع"])
         if val is not None:
-            st.session_state.bone_wk_override = int(val)
+            safe = min(max(int(val), 4), 24)
+            if safe != int(val): msg_extra += f" (تم ضبط الأسابيع إلى {safe}، الحد المسموح 4-24)"
+            st.session_state.bone_wk_override = safe
             updated = True
             
         val = get_number_near_keyword(user_input, ["تمعدن", "معدل"])
         if val is not None:
-            st.session_state.bone_km_override = min(max(val, 0.05), 0.5)
+            safe = min(max(val, 0.05), 0.5)
+            if safe != val: msg_extra += f" (تم ضبط التمعدن إلى {safe}، الحد المسموح 0.05-0.5)"
+            st.session_state.bone_km_override = safe
             updated = True
             
         val = get_number_near_keyword(user_input, ["نمو", "معامل"])
         if val is not None:
-            st.session_state.bone_mu_override = min(max(val, 1.1), 3.0)
+            safe = min(max(val, 1.1), 3.0)
+            if safe != val: msg_extra += f" (تم ضبط النمو إلى {safe}، الحد المسموح 1.1-3.0)"
+            st.session_state.bone_mu_override = safe
             updated = True
             
         val = get_number_near_keyword(user_input, ["صلابة", "قصوى", "ثبات"])
         if val is not None:
-            st.session_state.bone_Cm_override = min(max(val, 10.0), 30.0)
+            safe = min(max(val, 10.0), 30.0)
+            if safe != val: msg_extra += f" (تم ضبط الصلابة إلى {safe}، الحد المسموح 10-30)"
+            st.session_state.bone_Cm_override = safe
             updated = True
 
     elif app_name == "🦵 خشونة الركبة":
         val = get_number_near_keyword(user_input, ["سنة", "سنوات"])
         if val is not None:
-            st.session_state.knee_yrs_override = int(val)
+            safe = min(max(int(val), 1), 25)
+            if safe != int(val): msg_extra += f" (تم ضبط السنوات إلى {safe}، الحد المسموح 1-25)"
+            st.session_state.knee_yrs_override = safe
             updated = True
         val = get_number_near_keyword(user_input, ["إنتاج", "انتاج"])
         if val is not None:
-            st.session_state.knee_kp_override = min(max(val, 0.003), 0.012)
+            safe = min(max(val, 0.003), 0.012)
+            if safe != val: msg_extra += f" (تم ضبط إنتاج MMP إلى {safe})"
+            st.session_state.knee_kp_override = safe
             updated = True
 
     elif app_name == "💧 الأقراص الفقرية":
         val = get_number_near_keyword(user_input, ["ساعة", "ساعات"])
         if val is not None:
-            st.session_state.disc_h_override = int(val)
+            safe = min(max(int(val), 6), 48)
+            if safe != int(val): msg_extra += f" (تم ضبط الساعات إلى {safe}، الحد المسموح 6-48)"
+            st.session_state.disc_h_override = safe
             updated = True
         val = get_number_near_keyword(user_input, ["حمل"])
         if val is not None:
-            st.session_state.disc_pl_override = min(max(val, 0.2), 1.0)
+            safe = min(max(val, 0.2), 1.0)
+            if safe != val: msg_extra += f" (تم ضبط الحمل إلى {safe})"
+            st.session_state.disc_pl_override = safe
             updated = True
 
     elif app_name == "🩹 التئام الجروح":
         val = get_number_near_keyword(user_input, ["أسبوع", "اسبوع"])
         if val is not None:
-            st.session_state.wound_wk_override = int(val)
+            safe = min(max(int(val), 4), 16)
+            if safe != int(val): msg_extra += f" (تم ضبط الأسابيع إلى {safe}، الحد المسموح 4-16)"
+            st.session_state.wound_wk_override = safe
             updated = True
             
         if "مصاب" in user_input or "عدوى" in user_input:
@@ -229,11 +245,13 @@ def process_chat_command(user_input, app_name):
     elif app_name == "⚙️ النموذج الديناميكي العام":
         val = get_number_near_keyword(user_input, ["زمن"])
         if val is not None:
-            st.session_state.gen_te_override = int(val)
+            safe = min(max(int(val), 10), 200)
+            if safe != int(val): msg_extra += f" (تم ضبط الزمن إلى {safe}، الحد المسموح 10-200)"
+            st.session_state.gen_te_override = safe
             updated = True
 
     if updated:
-        return True, f"✅ تم تحديث المعاملات بناءً على طلبك: '{user_input}'. جاري إعادة المحاكاة..."
+        return True, f"✅ تم تحديث المعاملات بناءً على طلبك: '{user_input}'.{msg_extra} جاري إعادة المحاكاة..."
     else:
         return False, f"⚠️ عذراً، لم أتعرف على الأمر في سياق هذا التطبيق. يرجى كتابة طلب واضح، مثل: 'غير عدد الأسابيع إلى 12' أو 'ارفع معدل التمعدن إلى 0.4'."
 
@@ -1187,7 +1205,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 15.1 (Smart Hybrid Edition) | "
+    "**HYDROMEM Dynamics AI** — الإصدار 15.1 (Smart Hybrid Edition - Armored) | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
