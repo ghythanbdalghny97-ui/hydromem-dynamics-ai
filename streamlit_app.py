@@ -213,6 +213,42 @@ def process_chat_command(user_input, app_name):
 
 
 # ============================================================
+#                  النماذج الرياضية (تم التأكد من وجودها بالكامل)
+# ============================================================
+
+def general(y, t, mu, k, b, g):
+    A, T = y
+    return [mu*A - A**3 - k*T*A, b*(A-T) - g*T]
+
+def cartilage(y, t, kp, kd, a, ms):
+    c, m = y
+    return [kp - kd*c, -a*(c/ms)*m]
+
+def bone(y, t, k, mu, Cm, C_floor=0.0):
+    Ca, m, C = y
+    dCa = 0.5*(1 - Ca/5)
+    dm = k*max(mu-1, 0)*(1-m)
+    dC = 0.5*(Cm*m**1.5 - C)
+    if C < C_floor:
+        dC = max(dC, 0)
+    return [dCa, dm, dC]
+
+def disc(y, t, ks, kd, Pl):
+    w, h, P = y
+    return [ks*(1-w) - kd*w*Pl, 0.05*(w-0.5)*(1.5-h), 0.3*(w-0.6) - 0.1*P]
+
+def wound(y, t, p):
+    E, F, C, I, B, M = y
+    E, F, C = max(E,0), max(F,0), max(C,0)
+    return [p['ke']*E*(1-E) - p['ka']*E*I,
+            p['kf']*F*(1-F) - p['kd']*F*I,
+            p['kc']*F*(1-C) - p['kr']*C*M,
+            p['ki']*B - p['kii']*I,
+            p['kb']*(1-B) - p['kbb']*B*E,
+            p['km']*I - p['kmm']*M*0.8]
+
+
+# ============================================================
 #              دالة التقرير الطبي
 # ============================================================
 
@@ -761,7 +797,6 @@ elif app == "⚙️ النموذج الديناميكي العام":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        # === [جديد] ربط الأشرطة بالذاكرة ===
         A0 = st.slider("A₀", 0.0, 2.0, 0.5, 0.1, key='gen_A0')
         T0 = st.slider("Θ₀", 0.0, 2.0, 0.2, 0.1, key='gen_T0')
         mu = st.slider("μ", 0.1, 2.0, 1.0, 0.1, key='gen_mu')
@@ -785,10 +820,9 @@ elif app == "⚙️ النموذج الديناميكي العام":
     c3.metric("A الأقصى", f"{s[:,0].max():.6f}")
     c4.metric("Θ الأقصى", f"{s[:,1].max():.6f}")
     
-    # === [جديد] إضافة الدردشة أسفل التطبيق ===
     st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
     st.subheader("💬 دردشة التحكم السريع (HYDROMEM Hybrid Chat)")
-    st.info("💡 يمكنك كتابة طلبك هنا لتعديل الأشرطة تلقائياً. مثال: 'غير الزمن إلى 100' أو 'ارفع معامل النمو إلى 1.5'")
+    st.info("💡 يمكنك كتابة طلبك هنا لتعديل الأشرطة تلقائياً. مثال: 'غير الزمن إلى 100'")
     
     if "gen_chat" not in st.session_state:
         st.session_state.gen_chat = [{"role": "assistant", "content": "مرحباً! أنا مساعدك الذكي. كيف يمكنني مساعدتك في تعديل المحاكاة؟"}]
@@ -805,7 +839,7 @@ elif app == "⚙️ النموذج الديناميكي العام":
         st.chat_message("assistant").write(response_msg)
         
         if updated:
-            st.rerun() # إعادة تشغيل الواجهة لتحديث الأشرطة والرسومات
+            st.rerun()
     use_trial()
 
 
@@ -814,7 +848,6 @@ elif app == "🦵 خشونة الركبة":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        # === [جديد] ربط الأشرطة بالذاكرة ===
         yrs = st.slider("عدد السنوات", 1, 25, 10, key='knee_yrs')
         kp = st.slider("معدل إنتاج MMP", 0.003, 0.012, 0.005, 0.001, key='knee_kp')
         kd = st.slider("معدل التحلل", 0.008, 0.025, 0.015, 0.001, key='knee_kd')
@@ -862,7 +895,6 @@ elif app == "🦵 خشونة الركبة":
                "المتابعة": ["زيارة طبيب سنوياً"]}
     generate_report("خشونة الركبة", results, timeline, rec)
     
-    # === [جديد] إضافة الدردشة ===
     st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
     st.subheader("💬 دردشة التحكم السريع")
     if "knee_chat" not in st.session_state:
@@ -884,7 +916,6 @@ elif app == "🦴 التئام العظام":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        # === [جديد] ربط الأشرطة بالذاكرة ===
         wk = st.slider("عدد الأسابيع", 4, 24, 16, key='bone_wk')
         km = st.slider("معدل التمعدن", 0.05, 0.5, 0.3, 0.05, key='bone_km')
         mu = st.slider("معامل النمو", 1.1, 3.0, 2.0, 0.1, key='bone_mu')
@@ -924,7 +955,6 @@ elif app == "🦴 التئام العظام":
            "المتابعة": ["زيارة طبيب العظام"]}
     generate_report("التئام العظام", results, timeline, rec)
     
-    # === [جديد] إضافة الدردشة ===
     st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
     st.subheader("💬 دردشة التحكم السريع")
     st.info("💡 مثال: 'حاكي التئام العظام لمدة 20 أسبوعاً بمعدل تمعدن 0.4 وصلابة قصوى 25'")
@@ -947,7 +977,6 @@ elif app == "💧 الأقراص الفقرية":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        # === [جديد] ربط الأشرطة بالذاكرة ===
         h = st.slider("عدد الساعات", 6, 48, 24, key='disc_h')
         ks = st.slider("معدل الانتفاخ", 0.05, 0.2, 0.1, 0.01, key='disc_ks')
         kd = st.slider("معدل التحلل", 0.02, 0.1, 0.05, 0.01, key='disc_kd')
@@ -987,7 +1016,6 @@ elif app == "💧 الأقراص الفقرية":
            "المتابعة": ["طبيب عمود فقري عند استمرار الألم"]}
     generate_report("الأقراص الفقرية", results, timeline, rec)
     
-    # === [جديد] إضافة الدردشة ===
     st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
     st.subheader("💬 دردشة التحكم السريع")
     if "disc_chat" not in st.session_state:
@@ -1009,7 +1037,6 @@ elif app == "🩹 التئام الجروح":
     st.markdown("---")
     c1, c2 = st.columns([1, 3])
     with c1:
-        # === [جديد] ربط الأشرطة بالذاكرة ===
         wk = st.slider("عدد الأسابيع", 4, 16, 12, key='wound_wk')
         scenario = st.selectbox("السيناريو", ["Normal (طبيعي)", "Infected (مصاب)", "Fast (سريع)"], key='wound_scenario')
         if "Normal" in scenario:
@@ -1067,7 +1094,6 @@ elif app == "🩹 التئام الجروح":
                "التغذية": ["بروتين", "فيتامين C"]}
     generate_report("التئام الجروح", results, timeline, rec)
     
-    # === [جديد] إضافة الدردشة ===
     st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
     st.subheader("💬 دردشة التحكم السريع")
     if "wound_chat" not in st.session_state:
