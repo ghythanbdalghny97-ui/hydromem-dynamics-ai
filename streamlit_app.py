@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v15.4 (Final Stable Edition)
+HYDROMEM Dynamics AI v15.5 (Final Ultimate Edition)
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 15.4 — Full Platform + Word-Based Smart NLP (No Overwrite)
+Version 15.5 — Bidirectional Smart Extraction
 ============================================================
 """
 
@@ -146,14 +146,15 @@ apply_simulation_overrides()
 
 
 # ============================================================
-#         محرك استخراج الأرقام الذكي (Word-Based)
+#    محرك استخراج الأرقام الذكي (ثنائي الاتجاه - Bidirectional)
 # ============================================================
 
-def smart_extract_number(text, keywords, previous_value=None):
+def smart_extract_number(text, keywords, search_direction='forward', previous_value=None):
     """
-    محرك استخراج ذكي يعتمد على تقسيم النص إلى كلمات.
-    يبحث عن الرقم الأقرب للكلمة المفتاحية (بعدها أولاً، ثم قبلها).
-    إذا لم يجد الكلمة المفتاحية في النص، يرجع None (لا تغيير).
+    محرك استخراج ذكي ثنائي الاتجاه:
+    - search_direction='backward': يبحث عن الرقم قبل الكلمة المفتاحية أولاً (للوحدات الزمنية)
+    - search_direction='forward': يبحث عن الرقم بعد الكلمة المفتاحية أولاً (للمعاملات الفيزيائية)
+    - يبحث حتى 4 كلمات في كل اتجاه
     """
     import re
     
@@ -163,40 +164,47 @@ def smart_extract_number(text, keywords, previous_value=None):
         text = text.replace(ar, en)
     
     # تقسيم النص إلى كلمات
-    words = text.split()
+    tokens = text.split()
     
     for kw in keywords:
-        # البحث عن أي كلمة تحتوي على الكلمة المفتاحية
-        for i, word in enumerate(words):
-            if kw in word:
-                # أولاً: البحث في الكلمتين التاليتين (بعد الكلمة المفتاحية)
-                for j in range(i + 1, min(i + 3, len(words))):
-                    cleaned = words[j].strip('.,،؛:!؟"\'')
-                    m = re.fullmatch(r'\d+(?:\.\d+)?', cleaned)
-                    if m:
-                        return float(m.group())
-                
-                # ثانياً: البحث في الكلمتين السابقتين (قبل الكلمة المفتاحية)
-                for j in range(i - 1, max(i - 3, -1), -1):
-                    cleaned = words[j].strip('.,،؛:!؟"\'')
-                    m = re.fullmatch(r'\d+(?:\.\d+)?', cleaned)
-                    if m:
-                        return float(m.group())
+        for i, token in enumerate(tokens):
+            if kw in token:
+                if search_direction == 'backward':
+                    # ابحث للخلف أولاً (حتى 4 كلمات)
+                    for j in range(i-1, max(i-5, -1), -1):
+                        cleaned = tokens[j].strip('.,،؛:!؟"\'')
+                        if re.fullmatch(r'\d+(?:\.\d+)?', cleaned):
+                            return float(cleaned)
+                    # ثم للأمام
+                    for j in range(i+1, min(i+5, len(tokens))):
+                        cleaned = tokens[j].strip('.,،؛:!؟"\'')
+                        if re.fullmatch(r'\d+(?:\.\d+)?', cleaned):
+                            return float(cleaned)
+                else:  # forward
+                    # ابحث للأمام أولاً (حتى 4 كلمات)
+                    for j in range(i+1, min(i+5, len(tokens))):
+                        cleaned = tokens[j].strip('.,،؛:!؟"\'')
+                        if re.fullmatch(r'\d+(?:\.\d+)?', cleaned):
+                            return float(cleaned)
+                    # ثم للخلف
+                    for j in range(i-1, max(i-5, -1), -1):
+                        cleaned = tokens[j].strip('.,،؛:!؟"\'')
+                        if re.fullmatch(r'\d+(?:\.\d+)?', cleaned):
+                            return float(cleaned)
     
-    # === لا يوجد أي تغيير إذا لم يجد الكلمة المفتاحية ===
     return None
 
 
 def process_chat_command(user_input, app_name):
     """
-    معالجة طلبات الدردشة مع استخراج ذكي للأرقام.
+    معالجة طلبات الدردشة مع استخراج ذكي ثنائي الاتجاه.
     """
     updated = False
     msg_extra = ""
     details = []
 
     if app_name == "🦴 التئام العظام":
-        val = smart_extract_number(user_input, ["أسبوع", "اسبوع", "أسابيع"], st.session_state.get('bone_wk'))
+        val = smart_extract_number(user_input, ["أسبوع", "اسبوع", "أسابيع"], search_direction='backward')
         if val is not None:
             safe = min(max(int(val), 4), 24)
             if safe != int(val): msg_extra += f" (ضُبط إلى {safe})"
@@ -204,7 +212,7 @@ def process_chat_command(user_input, app_name):
             details.append(f"أسابيع={safe}")
             updated = True
             
-        val = smart_extract_number(user_input, ["تمعدن"], st.session_state.get('bone_km'))
+        val = smart_extract_number(user_input, ["تمعدن"], search_direction='forward')
         if val is not None:
             safe = min(max(val, 0.05), 0.5)
             if safe != val: msg_extra += f" (تمعدن ضُبط إلى {safe})"
@@ -212,7 +220,7 @@ def process_chat_command(user_input, app_name):
             details.append(f"تمعدن={safe}")
             updated = True
             
-        val = smart_extract_number(user_input, ["نمو"], st.session_state.get('bone_mu'))
+        val = smart_extract_number(user_input, ["نمو"], search_direction='forward')
         if val is not None:
             safe = min(max(val, 1.1), 3.0)
             if safe != val: msg_extra += f" (نمو ضُبط إلى {safe})"
@@ -220,7 +228,7 @@ def process_chat_command(user_input, app_name):
             details.append(f"نمو={safe}")
             updated = True
             
-        val = smart_extract_number(user_input, ["صلابة", "قصوى", "ثبات"], st.session_state.get('bone_Cm'))
+        val = smart_extract_number(user_input, ["صلابة", "قصوى", "ثبات"], search_direction='forward')
         if val is not None:
             safe = min(max(val, 10.0), 30.0)
             if safe != val: msg_extra += f" (صلابة ضُبطت إلى {safe})"
@@ -229,14 +237,14 @@ def process_chat_command(user_input, app_name):
             updated = True
 
     elif app_name == "🦵 خشونة الركبة":
-        val = smart_extract_number(user_input, ["سنة", "سنوات"], st.session_state.get('knee_yrs'))
+        val = smart_extract_number(user_input, ["سنة", "سنوات"], search_direction='backward')
         if val is not None:
             safe = min(max(int(val), 1), 25)
             if safe != int(val): msg_extra += f" (سنوات ضُبطت إلى {safe})"
             st.session_state.knee_yrs_override = safe
             details.append(f"سنوات={safe}")
             updated = True
-        val = smart_extract_number(user_input, ["إنتاج", "انتاج"], st.session_state.get('knee_kp'))
+        val = smart_extract_number(user_input, ["إنتاج", "انتاج"], search_direction='forward')
         if val is not None:
             safe = min(max(val, 0.003), 0.012)
             if safe != val: msg_extra += f" (إنتاج MMP ضُبط إلى {safe})"
@@ -245,14 +253,14 @@ def process_chat_command(user_input, app_name):
             updated = True
 
     elif app_name == "💧 الأقراص الفقرية":
-        val = smart_extract_number(user_input, ["ساعة", "ساعات"], st.session_state.get('disc_h'))
+        val = smart_extract_number(user_input, ["ساعة", "ساعات"], search_direction='backward')
         if val is not None:
             safe = min(max(int(val), 6), 48)
             if safe != int(val): msg_extra += f" (ساعات ضُبطت إلى {safe})"
             st.session_state.disc_h_override = safe
             details.append(f"ساعات={safe}")
             updated = True
-        val = smart_extract_number(user_input, ["حمل"], st.session_state.get('disc_pl'))
+        val = smart_extract_number(user_input, ["حمل"], search_direction='forward')
         if val is not None:
             safe = min(max(val, 0.2), 1.0)
             if safe != val: msg_extra += f" (حمل ضُبط إلى {safe})"
@@ -261,7 +269,7 @@ def process_chat_command(user_input, app_name):
             updated = True
 
     elif app_name == "🩹 التئام الجروح":
-        val = smart_extract_number(user_input, ["أسبوع", "اسبوع"], st.session_state.get('wound_wk'))
+        val = smart_extract_number(user_input, ["أسبوع", "اسبوع"], search_direction='backward')
         if val is not None:
             safe = min(max(int(val), 4), 16)
             if safe != int(val): msg_extra += f" (أسابيع ضُبطت إلى {safe})"
@@ -283,7 +291,7 @@ def process_chat_command(user_input, app_name):
             updated = True
 
     elif app_name == "⚙️ النموذج الديناميكي العام":
-        val = smart_extract_number(user_input, ["زمن"], st.session_state.get('gen_te'))
+        val = smart_extract_number(user_input, ["زمن"], search_direction='forward')
         if val is not None:
             safe = min(max(int(val), 10), 200)
             if safe != int(val): msg_extra += f" (زمن ضُبط إلى {safe})"
@@ -828,7 +836,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.4")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.5")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
@@ -1247,7 +1255,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 15.4 (Final Stable Edition) | "
+    "**HYDROMEM Dynamics AI** — الإصدار 15.5 (Final Ultimate Edition) | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
