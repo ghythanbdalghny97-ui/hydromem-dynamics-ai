@@ -8,9 +8,9 @@
 
 """
 ============================================================
-HYDROMEM Dynamics AI v15.0 (Hybrid Edition)
+HYDROMEM Dynamics AI v15.1 (Hybrid Edition - Fixed)
 منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
-Version 15.0 — Full Platform + Hybrid Chat/Sliders Integration
+Version 15.1 — Full Platform + Hybrid Chat/Sliders Integration
 ============================================================
 """
 
@@ -66,7 +66,6 @@ st.markdown("""
     .main { direction: rtl; text-align: right; }
     .stMetric { direction: rtl; }
     h1, h2, h3, h4 { direction: rtl; text-align: right; }
-    /* تنسيق دردشة الدمج */
     .chat-container { margin-top: 20px; border-top: 2px solid #667eea; padding-top: 15px; }
 </style>
 """, unsafe_allow_html=True)
@@ -117,15 +116,10 @@ def healing_stage(C, Cm):
 def init_simulation_state():
     """تهيئة قيم الأشرطة الافتراضية لجميع التطبيقات لضمان التحكم البرمجي"""
     defaults = {
-        # General Model
         'gen_A0': 0.5, 'gen_T0': 0.2, 'gen_mu': 1.0, 'gen_k': 0.5, 'gen_b': 0.8, 'gen_g': 0.3, 'gen_te': 50,
-        # Knee
         'knee_yrs': 10, 'knee_kp': 0.005, 'knee_kd': 0.015, 'knee_a': 0.00010,
-        # Bone
         'bone_wk': 16, 'bone_km': 0.3, 'bone_mu': 2.0, 'bone_Cm': 20.0,
-        # Disc
         'disc_h': 24, 'disc_ks': 0.1, 'disc_kd': 0.05, 'disc_pl': 0.5,
-        # Wound
         'wound_wk': 12, 'wound_scenario': "Normal (طبيعي)",
     }
     for key, value in defaults.items():
@@ -136,84 +130,105 @@ init_simulation_state()
 
 
 # ============================================================
+#              [جديد] تطبيق التعديلات القادمة من الدردشة قبل رسم الأشرطة
+# ============================================================
+
+def apply_simulation_overrides():
+    """تطبيق القيم المطلوبة من الدردشة قبل إنشاء الأشرطة لتجنب خطأ Streamlit"""
+    overrides = {
+        'gen_A0', 'gen_T0', 'gen_mu', 'gen_k', 'gen_b', 'gen_g', 'gen_te',
+        'knee_yrs', 'knee_kp', 'knee_kd', 'knee_a',
+        'bone_wk', 'bone_km', 'bone_mu', 'bone_Cm',
+        'disc_h', 'disc_ks', 'disc_kd', 'disc_pl',
+        'wound_wk', 'wound_scenario'
+    }
+    for key in overrides:
+        override_key = f"{key}_override"
+        if override_key in st.session_state:
+            st.session_state[key] = st.session_state[override_key]
+            del st.session_state[override_key]
+
+apply_simulation_overrides()
+
+
+# ============================================================
 #              [جديد] دالة معالجة طلبات الدردشة (NLP محاكاة)
 # ============================================================
 
 def process_chat_command(user_input, app_name):
     """
-    تستقبل نص المستخدم، تستخرج الأرقام (محاكاة لـ Function Calling)،
-    ثم تحدث قيم الأشرطة في st.session_state
+    تستقبل نص المستخدم، تستخرج الأرقام، وتضع القيم في متغيرات مؤقتة (Override)
     """
     import re
     updated = False
-    msg_lower = user_input.lower()
-    
-    # استخراج الأرقام من النص
     numbers = [float(s) for s in re.findall(r"[-+]?\d*\.\d+|\d+", user_input)]
     
     if app_name == "🦴 التئام العظام":
         if "أسبوع" in user_input or "اسبوع" in user_input:
             if numbers:
-                st.session_state.bone_wk = int(numbers[0])
+                st.session_state.bone_wk_override = int(numbers[0])
                 updated = True
         if "تمعدن" in user_input or "معدل" in user_input:
             if len(numbers) > 0:
-                st.session_state.bone_km = min(max(numbers[0], 0.05), 0.5)
+                st.session_state.bone_km_override = min(max(numbers[0], 0.05), 0.5)
                 updated = True
         if "نمو" in user_input or "معامل" in user_input:
             if len(numbers) > 0:
-                st.session_state.bone_mu = min(max(numbers[0], 1.1), 3.0)
+                st.session_state.bone_mu_override = min(max(numbers[0], 1.1), 3.0)
                 updated = True
         if "صلابة" in user_input or "قصوى" in user_input:
             if len(numbers) > 0:
-                st.session_state.bone_Cm = min(max(numbers[0], 10.0), 30.0)
+                st.session_state.bone_Cm_override = min(max(numbers[0], 10.0), 30.0)
                 updated = True
 
     elif app_name == "🦵 خشونة الركبة":
         if "سنة" in user_input or "سنوات" in user_input:
             if numbers:
-                st.session_state.knee_yrs = int(numbers[0])
+                st.session_state.knee_yrs_override = int(numbers[0])
                 updated = True
         if "إنتاج" in user_input or "انتاج" in user_input:
             if numbers:
-                st.session_state.knee_kp = min(max(numbers[0], 0.003), 0.012)
+                st.session_state.knee_kp_override = min(max(numbers[0], 0.003), 0.012)
                 updated = True
 
     elif app_name == "💧 الأقراص الفقرية":
         if "ساعة" in user_input or "ساعات" in user_input:
             if numbers:
-                st.session_state.disc_h = int(numbers[0])
+                st.session_state.disc_h_override = int(numbers[0])
                 updated = True
         if "حمل" in user_input:
             if numbers:
-                st.session_state.disc_pl = min(max(numbers[0], 0.2), 1.0)
+                st.session_state.disc_pl_override = min(max(numbers[0], 0.2), 1.0)
                 updated = True
 
     elif app_name == "🩹 التئام الجروح":
         if "أسبوع" in user_input or "اسبوع" in user_input:
             if numbers:
-                st.session_state.wound_wk = int(numbers[0])
+                st.session_state.wound_wk_override = int(numbers[0])
                 updated = True
         if "مصاب" in user_input or "عدوى" in user_input:
-            st.session_state.wound_scenario = "Infected (مصاب)"
+            st.session_state.wound_scenario_override = "Infected (مصاب)"
             updated = True
         elif "سريع" in user_input:
-            st.session_state.wound_scenario = "Fast (سريع)"
+            st.session_state.wound_scenario_override = "Fast (سريع)"
             updated = True
         elif "طبيعي" in user_input:
-            st.session_state.wound_scenario = "Normal (طبيعي)"
+            st.session_state.wound_scenario_override = "Normal (طبيعي)"
             updated = True
 
     elif app_name == "⚙️ النموذج الديناميكي العام":
         if "زمن" in user_input and numbers:
-            st.session_state.gen_te = int(numbers[0])
+            st.session_state.gen_te_override = int(numbers[0])
             updated = True
 
-    return updated, f"تم تحديث المعاملات بناءً على طلبك: '{user_input}'. جاري إعادة المحاكاة..."
+    if updated:
+        return True, f"✅ تم تحديث المعاملات بناءً على طلبك: '{user_input}'. جاري إعادة المحاكاة..."
+    else:
+        return False, f"⚠️ عذراً، لم أتعرف على الأمر في سياق هذا التطبيق. يرجى كتابة طلب واضح، مثل: 'غير عدد الأسابيع إلى 12' أو 'ارفع معدل التمعدن إلى 0.4'."
 
 
 # ============================================================
-#                  النماذج الرياضية (تم التأكد من وجودها بالكامل)
+#                  النماذج الرياضية
 # ============================================================
 
 def general(y, t, mu, k, b, g):
@@ -742,7 +757,7 @@ app = st.sidebar.radio("🔬 اختر التطبيق:", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.0")
+st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.1")
 st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com")
 st.sidebar.markdown("📱 +967 779193805")
 
@@ -1161,7 +1176,7 @@ c3.markdown("🏦 **الجاد: 2312718**")
 
 st.markdown("---")
 st.markdown(
-    "**HYDROMEM Dynamics AI** — الإصدار 15.0 (Hybrid Edition) | "
+    "**HYDROMEM Dynamics AI** — الإصدار 15.1 (Hybrid Edition - Fixed) | "
     "5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | "
     "© عبد الغني صالح محسن محمد غيثان 2026"
 )
