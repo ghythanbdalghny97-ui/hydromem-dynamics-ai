@@ -1,7 +1,11 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.0)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.2)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
-# Features: Chat History + Fixed Sanitizer + System Prompt
+# Features:
+#   - Chat History (ChatGPT-style sidebar)
+#   - Fixed Sanitizer (allows scientific terms)
+#   - Enhanced Retry (7 models × 3 attempts with progressive waits)
+#   - Retry Button for failed responses
 # ============================================================
 
 import streamlit as st
@@ -36,6 +40,10 @@ except ImportError:
     def get_chat_session_by_id(*a, **k): return None
     def delete_chat_session(*a, **k): return False
 
+
+# ============================================================
+#              Helper Functions
+# ============================================================
 
 def classify_kl(m):
     if m > 0.95: return "KL-0 (سليم)"
@@ -89,7 +97,7 @@ def sanitize_response(text):
         return text
     if "```" in text:
         return "أعتذر، لا يمكنني كتابة الأكواد البرمجية. أنا مساعد علمي وطبي مخصص للتحليل والمحاكاة."
-    
+
     forbidden = [
         "import streamlit", "from streamlit", "pip install streamlit",
         "supabase_utils", "supabase.co", "SUPABASE_URL", "SUPABASE_KEY",
@@ -105,10 +113,24 @@ def sanitize_response(text):
 
 
 def call_gemini_stream(client, contents):
+    """
+    محاولات متعددة مع تبديل تلقائي بين النماذج + أوقات انتظار متدرجة.
+    يغطي ضغط السيرفر المؤقت (503/429).
+    """
     models_to_try = [
-        'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash',
-        'gemini-3.8-flash', 'gemini-3.5-flash',
+        'gemini-flash-latest',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-2.5-pro',
+        'gemini-flash-lite-latest',
+        'gemini-3.8-flash',
+        'gemini-3.5-flash',
     ]
+
+    # أوقات انتظار متدرجة (بالثواني)
+    wait_times = [2, 5, 10]
+
+    last_error = None
     for model_name in models_to_try:
         for attempt in range(3):
             try:
@@ -117,15 +139,26 @@ def call_gemini_stream(client, contents):
                 for chunk in stream:
                     if chunk.text:
                         yield chunk.text
-                return
+                return  # نجح
             except Exception as e:
+                last_error = e
                 err = str(e)
-                if '503' in err or '429' in err or 'UNAVAILABLE' in err:
-                    time.sleep(3)
+
+                # إذا كان الضغط مؤقتاً، انتظر ثم أعد المحاولة
+                if ('503' in err or '429' in err or
+                        'UNAVAILABLE' in err or 'overloaded' in err.lower()):
+                    time.sleep(wait_times[attempt])
                     continue
                 else:
+                    # خطأ آخر (مثل 404) → انتقل للنموذج التالي
                     break
-    yield "⚠️ الخوادم مزدحمة. يرجى المحاولة بعد قليل."
+
+    # فشلت كل المحاولات
+    yield ("⚠️ الخوادم مزدحمة حالياً (خطأ 503 من Google).\n\n"
+           "🔹 **الحل:** انتظر 60-90 ثانية، ثم اضغط على زر '⏩ حاول مرة أخرى'.\n"
+           "🔹 هذا ضغط مؤقت على سيرفرات Google، وليس خطأ في تطبيقك.\n\n"
+           "⚠️ Servers are busy (503 from Google).\n"
+           "🔹 Solution: Wait 60-90 seconds, then click 'Retry'.")
 
 
 def get_user_identifier():
@@ -182,11 +215,15 @@ def save_current_session():
         st.session_state.current_session_id = session_id
 
 
+# ============================================================
+#              Main Chat Handler
+# ============================================================
+
 def handle_text_input(prompt):
     with st.chat_message("user"):
         st.markdown(prompt)
     st.session_state.chat_history.append({'role': 'user', 'content': prompt})
-    
+
     client = init_gemini()
     with st.chat_message("assistant"):
         if not client:
@@ -196,16 +233,18 @@ def handle_text_input(prompt):
         for msg in recent:
             role_name = "المستخدم" if msg['role'] == 'user' else "HYDROMEM"
             history_text += f"{role_name}: {msg['content']}\n"
-        
+
         system_prompt = get_system_prompt()
-        full_prompt = f"[تعليمات النظام]:\n{system_prompt}\n\n[سياق سابق]:\n{history_text}\n\n[السؤال]:\n{prompt}"
-        
+        full_prompt = (f"[تعليمات النظام]:\n{system_prompt}\n\n"
+                       f"[سياق سابق]:\n{history_text}\n\n"
+                       f"[السؤال]:\n{prompt}")
+
         contents = [full_prompt]
         if st.session_state.get('context_file'):
             contents.append(st.session_state.context_file)
         if st.session_state.get('context_image'):
             contents.append(st.session_state.context_image)
-        
+
         try:
             placeholder = st.empty()
             full_response = ""
@@ -217,12 +256,12 @@ def handle_text_input(prompt):
                     placeholder.markdown(full_response)
                     break
                 placeholder.markdown(full_response + "▌")
-            
+
             final = sanitize_response(full_response)
             placeholder.markdown(final)
             st.session_state.chat_history.append({'role': 'assistant', 'content': final})
             save_current_session()
-            
+
             col1, col2 = st.columns([1, 4])
             with col1:
                 st.download_button(
@@ -236,34 +275,55 @@ def handle_text_input(prompt):
                 if st.button("🔄 إعادة توليد", key=f"re_{datetime.now().timestamp()}"):
                     st.session_state.chat_history.pop()
                     st.rerun()
+
+            # زر "حاول مرة أخرى" — يظهر فقط عند فشل الرد بسبب ضغط الخوادم
+            if len(final) < 400 and ("⚠️" in final or "503" in final or "مزدحمة" in final):
+                st.warning("⚠️ الخوادم مزدحمة. اضغط الزر أدناه للمحاولة مرة أخرى بعد 60 ثانية.")
+                if st.button("⏩ حاول مرة أخرى", type="primary",
+                             use_container_width=True,
+                             key=f"retry_{datetime.now().timestamp()}"):
+                    # احذف رد الخطأ والسؤال
+                    if len(st.session_state.chat_history) >= 2:
+                        st.session_state.chat_history.pop()  # احذف رد AI
+                        st.session_state.chat_history.pop()  # احذف السؤال
+                    save_current_session()
+                    st.rerun()
         except Exception as e:
             st.error(f"❌ خطأ: {str(e)}")
 
 
+# ============================================================
+#              History Sidebar Renderer
+# ============================================================
+
 def render_history_sidebar():
     st.markdown("### 📚 سجل المحادثات")
-    if st.button("➕ محادثة جديدة", use_container_width=True, type="primary", key="new_chat_btn"):
+    if st.button("➕ محادثة جديدة", use_container_width=True,
+                 type="primary", key="new_chat_btn"):
         start_new_session()
         st.rerun()
     st.markdown("---")
-    
+
     if not CHAT_HISTORY_AVAILABLE:
         st.info("💡 لتفعيل حفظ المحادثات، أضف دوال chat_sessions إلى supabase_utils.py")
         return
-    
+
     user_id = get_user_identifier()
     sessions = get_chat_sessions(user_id, limit=30)
-    
+
     if not sessions:
         st.caption("لا توجد محادثات محفوظة بعد")
         return
-    
+
     from collections import OrderedDict
     grouped = OrderedDict()
     now = datetime.now()
+
     for s in sessions:
         try:
-            updated = datetime.fromisoformat(s['updated_at'].replace('Z', '+00:00')).replace(tzinfo=None)
+            updated = datetime.fromisoformat(
+                s['updated_at'].replace('Z', '+00:00')
+            ).replace(tzinfo=None)
         except Exception:
             updated = now
         diff_days = (now.date() - updated.date()).days
@@ -276,7 +336,7 @@ def render_history_sidebar():
         else:
             group = updated.strftime("%B %Y")
         grouped.setdefault(group, []).append(s)
-    
+
     for group_name, items in grouped.items():
         st.markdown(f"**{group_name}**")
         for s in items:
@@ -285,7 +345,8 @@ def render_history_sidebar():
             prefix = "🔵 " if is_current else ""
             col_a, col_b = st.columns([5, 1])
             with col_a:
-                if st.button(f"{prefix}{title}", key=f"sess_{s['id']}", use_container_width=True):
+                if st.button(f"{prefix}{title}", key=f"sess_{s['id']}",
+                             use_container_width=True):
                     full_session = get_chat_session_by_id(s['id'])
                     if full_session:
                         load_session_to_state(full_session)
@@ -299,11 +360,15 @@ def render_history_sidebar():
         st.markdown("")
 
 
+# ============================================================
+#              Main Chat Page
+# ============================================================
+
 def chat_page():
     st.header("💬 HYDROMEM Chat — المساعد العلمي الذكي")
     st.markdown("*مدعوم بـ Google Gemini AI*")
     st.markdown("---")
-    
+
     if 'chat_history' not in st.session_state:
         st.session_state.chat_history = []
     if 'current_session_id' not in st.session_state:
@@ -314,7 +379,7 @@ def chat_page():
         st.session_state.context_image = None
     if 'file_name' not in st.session_state:
         st.session_state.file_name = None
-    
+
     with st.sidebar:
         render_history_sidebar()
         st.markdown("---")
@@ -331,31 +396,34 @@ def chat_page():
                 st.session_state.context_image = Image.open(io.BytesIO(file_bytes))
                 st.session_state.context_file = None
             else:
-                st.session_state.context_file = types.Part.from_bytes(data=file_bytes, mime_type=mime)
+                st.session_state.context_file = types.Part.from_bytes(
+                    data=file_bytes, mime_type=mime)
                 st.session_state.context_image = None
             st.session_state.file_name = uploaded_file.name
             st.success(f"✅ تم إرفاق: {uploaded_file.name}")
+
         if st.session_state.file_name:
             if st.button("🗑️ مسح الملف", use_container_width=True):
                 st.session_state.context_file = None
                 st.session_state.context_image = None
                 st.session_state.file_name = None
                 st.rerun()
-    
+
     for msg in st.session_state.chat_history:
         with st.chat_message(msg['role']):
             st.markdown(msg['content'])
-    
+
     prompt = st.chat_input("اكتب سؤالك...")
     if prompt:
         handle_text_input(prompt)
-    
+
     st.markdown("---")
     st.markdown("""
     **💡 ميزات النسخة الاحترافية:**
     - 🧠 **الذاكرة:** يتذكر سياق المحادثة.
     - 📚 **سجل المحادثات:** يعرض كل محادثاتك السابقة (اليوم، أمس، هذا الشهر).
     - ⚡ **البث المباشر:** الرد يظهر حرفاً بحرف.
-    - 🔄 **التجاوز التلقائي:** يحاول 5 نماذج × 3 مرات.
+    - 🔄 **التجاوز التلقائي:** يحاول 7 نماذج × 3 مرات.
+    - ⏩ **زر إعادة المحاولة:** يظهر عند ضغط الخوادم.
     - 🔒 **الحماية:** يمنع تسريب الكود والبنية التحتية.
     """)
