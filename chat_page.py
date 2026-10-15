@@ -1,10 +1,10 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.8)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.9)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
 #   - Chat History
 #   - Fixed Sanitizer
-#   - Groq Integration (Using llama-3.3-70b-versatile)
+#   - Groq Auto-Discovery (فحص وبحث تلقائي عن النموذج المتاح)
 #   - Gemini Fallback
 # ============================================================
 
@@ -110,7 +110,7 @@ def sanitize_response(text):
 def call_ai_stream(contents_list):
     prompt_text = contents_list[0] if isinstance(contents_list, list) else str(contents_list)
     
-    # ----------------- 1. محاولة Groq (الأساسي والفائق السرعة) -----------------
+    # ----------------- 1. محاولة Groq بالبحث التلقائي عن النماذج -----------------
     if GROQ_AVAILABLE:
         groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
         if groq_key:
@@ -123,27 +123,45 @@ def call_ai_stream(contents_list):
                     {"role": "user", "content": prompt_text}
                 ]
                 
-                stream = client_groq.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=messages,
-                    temperature=0.7,
-                    stream=True
-                )
+                # قائمة النماذج التي سيجربها النظام تلقائياً بالترتيب حتى ينجح واحد منها
+                groq_models_to_try = [
+                    "llama-3.3-70b-versatile",
+                    "llama-3.1-70b-versatile",
+                    "llama3-70b-8192",
+                    "llama3-8b-8192",
+                    "mixtral-8x7b-32768"
+                ]
                 
-                has_content = False
-                for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        has_content = True
-                        yield chunk.choices[0].delta.content
-                if has_content:
+                success_groq = False
+                for g_model in groq_models_to_try:
+                    try:
+                        stream = client_groq.chat.completions.create(
+                            model=g_model,
+                            messages=messages,
+                            temperature=0.7,
+                            stream=True
+                        )
+                        
+                        has_content = False
+                        for chunk in stream:
+                            if chunk.choices[0].delta.content:
+                                has_content = True
+                                yield chunk.choices[0].delta.content
+                        if has_content:
+                            success_groq = True
+                            return # نجح البحث والتوليد عبر Groq!
+                    except Exception:
+                        continue # إذا فشل هذا النموذج، انتقل تلقائياً للنموذج التالي في القائمة
+                
+                if success_groq:
                     return
-            except Exception as groq_err:
-                yield f"\n⚠️ [تنبيه Groq]: {str(groq_err)}\nجاري الانتقال لـ Gemini...\n\n"
+            except Exception:
+                pass
 
-    # ----------------- 2. محاولة Gemini (الاحتياطي) -----------------
+    # ----------------- 2. محاولة Gemini (النظام الاحتياطي) -----------------
     client_gemini = init_gemini()
     if not client_gemini:
-        yield "⚠️ لم يتم العثور على مفتاح Gemini الصحيح."
+        yield "⚠️ لم يتم العثور على مفتاح التشغيل الصحيح."
         return
 
     models_to_try = [
@@ -169,7 +187,7 @@ def call_ai_stream(contents_list):
                 else:
                     break
 
-    yield ("⚠️ فشلت جميع المحاولات. تحقق من صحة المفاتيح والأذونات.")
+    yield ("⚠️ فشلت جميع المحاولات والبدائل. تحقق من الأذونات.")
 
 
 def get_user_identifier():
@@ -342,7 +360,7 @@ def render_history_sidebar():
 
 def chat_page():
     st.header("💬 HYDROMEM Chat — المساعد العلمي الذكي")
-    st.markdown("*مدعوم بـ Groq و Google Gemini*")
+    st.markdown("*مدعوم بالبحث الذكي التلقائي (Groq & Gemini)*")
     st.markdown("---")
 
     if 'chat_history' not in st.session_state:
