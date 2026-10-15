@@ -1,10 +1,10 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.2)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.3)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
 #   - Chat History (ChatGPT-style sidebar)
-#   - Fixed Sanitizer (allows scientific terms)
-#   - Enhanced Retry (7 models × 3 attempts with progressive waits)
+#   - Fixed Sanitizer
+#   - Fast Retry (3 models × 2 attempts = 6 total, fast waits)
 #   - Retry Button for failed responses
 # ============================================================
 
@@ -24,7 +24,6 @@ try:
 except ImportError:
     GEMINI_AVAILABLE = False
 
-# Import chat session functions from supabase_utils
 try:
     from supabase_utils import (
         save_chat_session,
@@ -114,55 +113,42 @@ def sanitize_response(text):
 
 def call_gemini_stream(client, contents):
     """
-    محاولات متعددة مع تبديل تلقائي بين النماذج + أوقات انتظار متدرجة.
-    يغطي ضغط السيرفر المؤقت (503/429).
+    محاولات سريعة: 3 نماذج × 2 محاولات = 6 محاولات فقط.
+    أوقات انتظار قصيرة (1، 2 ثانية).
     """
     models_to_try = [
         'gemini-flash-latest',
         'gemini-2.5-flash',
         'gemini-2.0-flash',
-        'gemini-2.5-pro',
-        'gemini-flash-lite-latest',
-        'gemini-3.8-flash',
-        'gemini-3.5-flash',
     ]
 
-    # أوقات انتظار متدرجة (بالثواني)
-    wait_times = [2, 5, 10]
+    wait_times = [1, 2]
 
-    last_error = None
     for model_name in models_to_try:
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 stream = client.models.generate_content_stream(
                     model=model_name, contents=contents)
                 for chunk in stream:
                     if chunk.text:
                         yield chunk.text
-                return  # نجح
+                return
             except Exception as e:
-                last_error = e
                 err = str(e)
-
-                # إذا كان الضغط مؤقتاً، انتظر ثم أعد المحاولة
                 if ('503' in err or '429' in err or
                         'UNAVAILABLE' in err or 'overloaded' in err.lower()):
                     time.sleep(wait_times[attempt])
                     continue
                 else:
-                    # خطأ آخر (مثل 404) → انتقل للنموذج التالي
                     break
 
-    # فشلت كل المحاولات
     yield ("⚠️ الخوادم مزدحمة حالياً (خطأ 503 من Google).\n\n"
-           "🔹 **الحل:** انتظر 60-90 ثانية، ثم اضغط على زر '⏩ حاول مرة أخرى'.\n"
-           "🔹 هذا ضغط مؤقت على سيرفرات Google، وليس خطأ في تطبيقك.\n\n"
+           "🔹 انتظر 60-90 ثانية، ثم اضغط على زر '⏩ حاول مرة أخرى'.\n\n"
            "⚠️ Servers are busy (503 from Google).\n"
            "🔹 Solution: Wait 60-90 seconds, then click 'Retry'.")
 
 
 def get_user_identifier():
-    """معرّف فريد للمستخدم لحفظ محادثاته"""
     if 'user_identifier' not in st.session_state:
         if st.session_state.get('customer_name'):
             st.session_state.user_identifier = st.session_state.customer_name
@@ -276,16 +262,14 @@ def handle_text_input(prompt):
                     st.session_state.chat_history.pop()
                     st.rerun()
 
-            # زر "حاول مرة أخرى" — يظهر فقط عند فشل الرد بسبب ضغط الخوادم
             if len(final) < 400 and ("⚠️" in final or "503" in final or "مزدحمة" in final):
-                st.warning("⚠️ الخوادم مزدحمة. اضغط الزر أدناه للمحاولة مرة أخرى بعد 60 ثانية.")
+                st.warning("⚠️ الخوادم مزدحمة. اضغط الزر أدناه للمحاولة مرة أخرى.")
                 if st.button("⏩ حاول مرة أخرى", type="primary",
                              use_container_width=True,
                              key=f"retry_{datetime.now().timestamp()}"):
-                    # احذف رد الخطأ والسؤال
                     if len(st.session_state.chat_history) >= 2:
-                        st.session_state.chat_history.pop()  # احذف رد AI
-                        st.session_state.chat_history.pop()  # احذف السؤال
+                        st.session_state.chat_history.pop()
+                        st.session_state.chat_history.pop()
                     save_current_session()
                     st.rerun()
         except Exception as e:
@@ -421,9 +405,9 @@ def chat_page():
     st.markdown("""
     **💡 ميزات النسخة الاحترافية:**
     - 🧠 **الذاكرة:** يتذكر سياق المحادثة.
-    - 📚 **سجل المحادثات:** يعرض كل محادثاتك السابقة (اليوم، أمس، هذا الشهر).
+    - 📚 **سجل المحادثات:** يعرض كل محادثاتك السابقة.
     - ⚡ **البث المباشر:** الرد يظهر حرفاً بحرف.
-    - 🔄 **التجاوز التلقائي:** يحاول 7 نماذج × 3 مرات.
+    - 🔄 **التجاوز التلقائي:** 3 نماذج × 2 محاولات (سريع).
     - ⏩ **زر إعادة المحاولة:** يظهر عند ضغط الخوادم.
     - 🔒 **الحماية:** يمنع تسريب الكود والبنية التحتية.
     """)
