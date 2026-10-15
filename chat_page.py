@@ -1,11 +1,12 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.9)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v3.0)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
-#   - Chat History
+#   - Chat History (Supabase)
 #   - Fixed Sanitizer
-#   - Groq Auto-Discovery (فحص وبحث تلقائي عن النموذج المتاح)
-#   - Gemini Fallback
+#   - Groq Auto-Discovery (Updated Models)
+#   - Gemini Fallback (Updated Models)
+#   - Error Logging (كشف الأخطاء الحقيقية)
 # ============================================================
 
 import streamlit as st
@@ -109,85 +110,73 @@ def sanitize_response(text):
 
 def call_ai_stream(contents_list):
     prompt_text = contents_list[0] if isinstance(contents_list, list) else str(contents_list)
-    
-    # ----------------- 1. محاولة Groq بالبحث التلقائي عن النماذج -----------------
+    errors = []
+
+    # ----------------- 1. محاولة Groq -----------------
     if GROQ_AVAILABLE:
         groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
         if groq_key:
             try:
                 client_groq = Groq(api_key=groq_key)
                 system_prompt = get_system_prompt()
-                
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt_text}
                 ]
-                
-                # قائمة النماذج التي سيجربها النظام تلقائياً بالترتيب حتى ينجح واحد منها
+                # قائمة النماذج المُحدثة لـ Groq
                 groq_models_to_try = [
                     "llama-3.3-70b-versatile",
-                    "llama-3.1-70b-versatile",
-                    "llama3-70b-8192",
-                    "llama3-8b-8192",
-                    "mixtral-8x7b-32768"
+                    "llama-3.1-8b-instant",
+                    "llama3-70b-8192"
                 ]
-                
-                success_groq = False
                 for g_model in groq_models_to_try:
                     try:
                         stream = client_groq.chat.completions.create(
-                            model=g_model,
-                            messages=messages,
-                            temperature=0.7,
-                            stream=True
+                            model=g_model, messages=messages, temperature=0.7, stream=True
                         )
-                        
                         has_content = False
                         for chunk in stream:
                             if chunk.choices[0].delta.content:
                                 has_content = True
                                 yield chunk.choices[0].delta.content
                         if has_content:
-                            success_groq = True
-                            return # نجح البحث والتوليد عبر Groq!
-                    except Exception:
-                        continue # إذا فشل هذا النموذج، انتقل تلقائياً للنموذج التالي في القائمة
-                
-                if success_groq:
-                    return
-            except Exception:
-                pass
+                            return # نجح Groq!
+                    except Exception as e:
+                        errors.append(f"Groq ({g_model}): {str(e)}")
+                        continue
+            except Exception as e:
+                errors.append(f"Groq Init: {str(e)}")
+        else:
+            errors.append("مفتاح Groq مفقود")
 
-    # ----------------- 2. محاولة Gemini (النظام الاحتياطي) -----------------
+    # ----------------- 2. محاولة Gemini -----------------
     client_gemini = init_gemini()
     if not client_gemini:
-        yield "⚠️ لم يتم العثور على مفتاح التشغيل الصحيح."
-        return
+        errors.append("فشل تهيئة Gemini (تأكد من المفتاح)")
+    else:
+        # قائمة النماذج المُحدثة لـ Gemini
+        gemini_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
+        for model_name in gemini_models:
+            for attempt in range(2):
+                try:
+                    stream = client_gemini.models.generate_content_stream(
+                        model=model_name, contents=contents_list)
+                    for chunk in stream:
+                        if chunk.text:
+                            yield chunk.text
+                    return # نجح Gemini!
+                except Exception as e:
+                    err = str(e)
+                    errors.append(f"Gemini ({model_name}): {err}")
+                    if ('503' in err or '429' in err or 'UNAVAILABLE' in err):
+                        time.sleep(1)
+                        continue
+                    else:
+                        break
 
-    models_to_try = [
-        'gemini-1.5-flash',
-        'gemini-2.0-flash',
-    ]
-
-    for model_name in models_to_try:
-        for attempt in range(3):
-            try:
-                stream = client_gemini.models.generate_content_stream(
-                    model=model_name, contents=contents_list)
-                for chunk in stream:
-                    if chunk.text:
-                        yield chunk.text
-                return
-            except Exception as e:
-                err = str(e)
-                if ('503' in err or '429' in err or
-                        'UNAVAILABLE' in err or 'overloaded' in err.lower()):
-                    time.sleep(2)
-                    continue
-                else:
-                    break
-
-    yield ("⚠️ فشلت جميع المحاولات والبدائل. تحقق من الأذونات.")
+    # إذا فشل كل شيء، نعرض الأخطاء الحقيقية
+    error_msg = "⚠️ فشلت جميع المحاولات.\n\n**تفاصيل الأخطاء (للتشخيص):**\n" + "\n".join([f"- {e}" for e in errors])
+    yield error_msg
 
 
 def get_user_identifier():
@@ -307,6 +296,7 @@ def render_history_sidebar():
         return
 
     user_id = get_user_identifier()
+    # تم إضافة limit=30 هنا، لذا تأكد من تحديث supabase_utils.py ليدعمها
     sessions = get_chat_sessions(user_id, limit=30)
 
     if not sessions:
