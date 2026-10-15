@@ -1,11 +1,11 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v3.0)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v3.2)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
 #   - Chat History (Supabase)
 #   - Fixed Sanitizer
-#   - Groq Auto-Discovery (Updated Models)
-#   - Gemini Fallback (Updated Models)
+#   - Groq Auto-Discovery (البحث التلقائي عن النماذج المتاحة)
+#   - Gemini Auto-Discovery (البحث التلقائي عن النماذج المتاحة)
 #   - Error Logging (كشف الأخطاء الحقيقية)
 # ============================================================
 
@@ -60,7 +60,8 @@ def init_gemini():
         api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
         if not api_key:
             return None
-        client = genai.Client(api_key=api_key, http_options={'api_version': 'v1'})
+        # استخدام v1beta لدعم النماذج الجديدة
+        client = genai.Client(api_key=api_key, http_options={'api_version': 'v1beta'})
         return client
     except Exception:
         return None
@@ -108,11 +109,58 @@ def sanitize_response(text):
     return text
 
 
+def get_available_groq_models(client_groq):
+    """البحث التلقائي عن نماذج Groq المتاحة"""
+    try:
+        models_data = client_groq.models.list().data
+        all_models = [m.id for m in models_data if 'llama' in m.id.lower() or 'mixtral' in m.id.lower() or 'gemma' in m.id.lower()]
+        
+        # ترتيب النماذج حسب الأولوية (الأحدث والأفضل أولاً)
+        pref_order = [
+            "llama-3.3-70b-versatile", "llama-3.1-70b-versatile", 
+            "llama-3.1-8b-instant", "mixtral-8x7b-32768", 
+            "gemma2-9b-it", "llama3-70b-8192"
+        ]
+        
+        sorted_models = []
+        for p in pref_order:
+            if p in all_models:
+                sorted_models.append(p)
+                
+        for m in all_models:
+            if m not in sorted_models:
+                sorted_models.append(m)
+                
+        return sorted_models[:5]  # نأخذ أفضل 5 نماذج فقط لتسريع العملية
+    except Exception:
+        # في حال فشل البحث، نستخدم قائمة افتراضية
+        return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+
+
+def get_available_gemini_models(client_gemini):
+    """البحث التلقائي عن نماذج Gemini المتاحة"""
+    try:
+        models = client_gemini.models.list()
+        available = []
+        for m in models:
+            if 'generateContent' in getattr(m, 'supported_actions', []):
+                name = m.name.replace('models/', '')
+                if 'gemini' in name and ('flash' in name or 'pro' in name):
+                    available.append(name)
+        
+        # ترتيب النماذج: flash أولاً (أسرع)، ثم pro، ويفضل الإصدارات الأحدث
+        available.sort(key=lambda x: (('1.5' not in x and '2.0' not in x and '2.5' not in x), 'pro' in x))
+        
+        return available if available else ['gemini-1.5-flash', 'gemini-2.0-flash']
+    except Exception:
+        return ['gemini-1.5-flash', 'gemini-2.0-flash']
+
+
 def call_ai_stream(contents_list):
     prompt_text = contents_list[0] if isinstance(contents_list, list) else str(contents_list)
     errors = []
 
-    # ----------------- 1. محاولة Groq -----------------
+    # ----------------- 1. محاولة Groq مع البحث التلقائي -----------------
     if GROQ_AVAILABLE:
         groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
         if groq_key:
@@ -123,12 +171,10 @@ def call_ai_stream(contents_list):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt_text}
                 ]
-                # قائمة النماذج المُحدثة لـ Groq
-                groq_models_to_try = [
-                    "llama-3.3-70b-versatile",
-                    "llama-3.1-8b-instant",
-                    "llama3-70b-8192"
-                ]
+                
+                # جلب النماذج المتاحة تلقائياً
+                groq_models_to_try = get_available_groq_models(client_groq)
+                
                 for g_model in groq_models_to_try:
                     try:
                         stream = client_groq.chat.completions.create(
@@ -149,13 +195,14 @@ def call_ai_stream(contents_list):
         else:
             errors.append("مفتاح Groq مفقود")
 
-    # ----------------- 2. محاولة Gemini -----------------
+    # ----------------- 2. محاولة Gemini مع البحث التلقائي -----------------
     client_gemini = init_gemini()
     if not client_gemini:
         errors.append("فشل تهيئة Gemini (تأكد من المفتاح)")
     else:
-        # قائمة النماذج المُحدثة لـ Gemini
-        gemini_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
+        # جلب النماذج المتاحة تلقائياً
+        gemini_models = get_available_gemini_models(client_gemini)
+        
         for model_name in gemini_models:
             for attempt in range(2):
                 try:
@@ -296,7 +343,6 @@ def render_history_sidebar():
         return
 
     user_id = get_user_identifier()
-    # تم إضافة limit=30 هنا، لذا تأكد من تحديث supabase_utils.py ليدعمها
     sessions = get_chat_sessions(user_id, limit=30)
 
     if not sessions:
