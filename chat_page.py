@@ -1,11 +1,11 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.3)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.4)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
-#   - Chat History (ChatGPT-style sidebar)
+#   - Chat History
 #   - Fixed Sanitizer
-#   - Fast Retry (3 models × 2 attempts = 6 total, fast waits)
-#   - Retry Button for failed responses
+#   - Original Retry Behavior (5 models × 3 attempts = 15 total)
+#   - Retry Button
 # ============================================================
 
 import streamlit as st
@@ -26,10 +26,8 @@ except ImportError:
 
 try:
     from supabase_utils import (
-        save_chat_session,
-        get_chat_sessions,
-        get_chat_session_by_id,
-        delete_chat_session,
+        save_chat_session, get_chat_sessions,
+        get_chat_session_by_id, delete_chat_session,
     )
     CHAT_HISTORY_AVAILABLE = True
 except ImportError:
@@ -39,10 +37,6 @@ except ImportError:
     def get_chat_session_by_id(*a, **k): return None
     def delete_chat_session(*a, **k): return False
 
-
-# ============================================================
-#              Helper Functions
-# ============================================================
 
 def classify_kl(m):
     if m > 0.95: return "KL-0 (سليم)"
@@ -91,7 +85,6 @@ def get_system_prompt():
 
 
 def sanitize_response(text):
-    """فلترة الرد لمنع تسريب الكود أو البنية التحتية فقط"""
     if not text:
         return text
     if "```" in text:
@@ -113,39 +106,43 @@ def sanitize_response(text):
 
 def call_gemini_stream(client, contents):
     """
-    محاولات سريعة: 3 نماذج × 2 محاولات = 6 محاولات فقط.
-    أوقات انتظار قصيرة (1، 2 ثانية).
+    السلوك الأصلي: 5 نماذج × 3 محاولات = 15 محاولة.
+    انتظار 3 ثوانٍ ثابتة بين المحاولات.
+    صامت تماماً حتى استنفاد كل المحاولات.
     """
     models_to_try = [
         'gemini-flash-latest',
         'gemini-2.5-flash',
         'gemini-2.0-flash',
+        'gemini-3.8-flash',
+        'gemini-3.5-flash',
     ]
 
-    wait_times = [1, 2]
-
     for model_name in models_to_try:
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 stream = client.models.generate_content_stream(
                     model=model_name, contents=contents)
                 for chunk in stream:
                     if chunk.text:
                         yield chunk.text
-                return
+                return  # نجح!
             except Exception as e:
                 err = str(e)
                 if ('503' in err or '429' in err or
                         'UNAVAILABLE' in err or 'overloaded' in err.lower()):
-                    time.sleep(wait_times[attempt])
+                    time.sleep(3)  # انتظار 3 ثوانٍ
                     continue
                 else:
+                    # خطأ مختلف (مثل 404) → انتقل للنموذج التالي
                     break
 
-    yield ("⚠️ الخوادم مزدحمة حالياً (خطأ 503 من Google).\n\n"
-           "🔹 انتظر 60-90 ثانية، ثم اضغط على زر '⏩ حاول مرة أخرى'.\n\n"
-           "⚠️ Servers are busy (503 from Google).\n"
-           "🔹 Solution: Wait 60-90 seconds, then click 'Retry'.")
+    # استُنفدت كل المحاولات (15 محاولة × 3 ثوانٍ = 45 ثانية انتظار)
+    yield ("⚠️ استُنفدت جميع المحاولات (15 محاولة). الخوادم مزدحمة بشكل غير معتاد.\n\n"
+           "🔹 **انتظر 30-60 دقيقة**، ثم جرب مرة أخرى.\n"
+           "🔹 أو استخدم التطبيق في وقت أقل ازدحاماً (بعد منتصف الليل).\n\n"
+           "⚠️ All 15 attempts failed. Servers are heavily overloaded.\n"
+           "🔹 Wait 30-60 minutes, then try again.")
 
 
 def get_user_identifier():
@@ -192,18 +189,13 @@ def save_current_session():
             title = generate_session_title(msg.get('content', ''))
             break
     session_id = save_chat_session(
-        user_identifier=user_id,
-        title=title,
+        user_identifier=user_id, title=title,
         messages=st.session_state.chat_history,
         session_id=st.session_state.current_session_id
     )
     if session_id:
         st.session_state.current_session_id = session_id
 
-
-# ============================================================
-#              Main Chat Handler
-# ============================================================
 
 def handle_text_input(prompt):
     with st.chat_message("user"):
@@ -262,9 +254,9 @@ def handle_text_input(prompt):
                     st.session_state.chat_history.pop()
                     st.rerun()
 
-            if len(final) < 400 and ("⚠️" in final or "503" in final or "مزدحمة" in final):
-                st.warning("⚠️ الخوادم مزدحمة. اضغط الزر أدناه للمحاولة مرة أخرى.")
-                if st.button("⏩ حاول مرة أخرى", type="primary",
+            if len(final) < 500 and ("⚠️" in final or "استُنفدت" in final):
+                st.warning("⚠️ جرب بعد 30-60 دقيقة.")
+                if st.button("⏩ حاول مرة أخرى الآن", type="primary",
                              use_container_width=True,
                              key=f"retry_{datetime.now().timestamp()}"):
                     if len(st.session_state.chat_history) >= 2:
@@ -275,10 +267,6 @@ def handle_text_input(prompt):
         except Exception as e:
             st.error(f"❌ خطأ: {str(e)}")
 
-
-# ============================================================
-#              History Sidebar Renderer
-# ============================================================
 
 def render_history_sidebar():
     st.markdown("### 📚 سجل المحادثات")
@@ -344,10 +332,6 @@ def render_history_sidebar():
         st.markdown("")
 
 
-# ============================================================
-#              Main Chat Page
-# ============================================================
-
 def chat_page():
     st.header("💬 HYDROMEM Chat — المساعد العلمي الذكي")
     st.markdown("*مدعوم بـ Google Gemini AI*")
@@ -407,7 +391,6 @@ def chat_page():
     - 🧠 **الذاكرة:** يتذكر سياق المحادثة.
     - 📚 **سجل المحادثات:** يعرض كل محادثاتك السابقة.
     - ⚡ **البث المباشر:** الرد يظهر حرفاً بحرف.
-    - 🔄 **التجاوز التلقائي:** 3 نماذج × 2 محاولات (سريع).
-    - ⏩ **زر إعادة المحاولة:** يظهر عند ضغط الخوادم.
+    - 🔄 **التجاوز التلقائي:** 5 نماذج × 3 محاولات = 15 محاولة.
     - 🔒 **الحماية:** يمنع تسريب الكود والبنية التحتية.
     """)
