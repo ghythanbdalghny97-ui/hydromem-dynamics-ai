@@ -1,10 +1,11 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.4)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.5)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
 #   - Chat History
 #   - Fixed Sanitizer
-#   - Original Retry Behavior (5 models × 3 attempts = 15 total)
+#   - Groq Integration (Primary Fast Engine)
+#   - Original Gemini Retry Behavior (Fallback: 5 models × 3 attempts = 15 total)
 #   - Retry Button
 # ============================================================
 
@@ -17,6 +18,13 @@ import io
 import time
 import uuid
 from google.genai import types
+
+# محاولة استيراد مكتبة Groq للسرعة الفائقة
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
 
 try:
     from google import genai
@@ -48,17 +56,14 @@ def classify_kl(m):
 
 def init_gemini():
     if not GEMINI_AVAILABLE:
-        st.error("⚠️ مكتبة google-genai غير مثبتة.")
         return None
     try:
         api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
         if not api_key:
-            st.warning("⚠️ لم يتم العثور على مفتاح GEMINI_API_KEY.")
             return None
         client = genai.Client(api_key=api_key, http_options={'api_version': 'v1'})
         return client
-    except Exception as e:
-        st.error(f"❌ خطأ في تهيئة Gemini: {str(e)}")
+    except Exception:
         return None
 
 
@@ -93,9 +98,9 @@ def sanitize_response(text):
     forbidden = [
         "import streamlit", "from streamlit", "pip install streamlit",
         "supabase_utils", "supabase.co", "SUPABASE_URL", "SUPABASE_KEY",
-        "GEMINI_API_KEY", "st.secrets",
+        "GEMINI_API_KEY", "GROQ_API_KEY", "st.secrets",
         "بنية المنصة", "البنية التحتية للمنصة", "كيف بنيت المنصة",
-        "الكود المصدري للمنصة", "github.com/ghythan",
+        "الكود المصدري للمنصة", "[github.com/ghythan](https://github.com/ghythan)",
     ]
     text_lower = text.lower()
     for kw in forbidden:
@@ -104,12 +109,50 @@ def sanitize_response(text):
     return text
 
 
-def call_gemini_stream(client, contents):
+def call_ai_stream(contents_list):
     """
-    السلوك الأصلي: 5 نماذج × 3 محاولات = 15 محاولة.
-    انتظار 3 ثوانٍ ثابتة بين المحاولات.
-    صامت تماماً حتى استنفاد كل المحاولات.
+    دالة ذكية ومدمجة:
+    1. تحاول أولاً استخدام Groq (سرعة فائقة واستقرار تام).
+    2. إذا فشل Groq أو لم يتوفر المفتاح، تنتقل تلقائياً إلى Gemini (السلوك الاحتياطي 15 محاولة).
     """
+    prompt_text = contents_list[0] if isinstance(contents_list, list) else str(contents_list)
+    
+    # ----------------- المحاولة عبر Groq (الخيار الأساسي والأسرع) -----------------
+    if GROQ_AVAILABLE:
+        groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
+        if groq_key:
+            try:
+                client_groq = Groq(api_key=groq_key)
+                system_prompt = get_system_prompt()
+                
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt_text}
+                ]
+                
+                stream = client_groq.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=messages,
+                    temperature=0.7,
+                    stream=True
+                )
+                
+                has_content = False
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        has_content = True
+                        yield chunk.choices[0].delta.content
+                if has_content:
+                    return # نجح الاستدعاء عبر Groq تماماً وبسرعة فائقة!
+            except Exception:
+                pass  # إذا حدث أي خطأ في Groq، ننتقل بسلاسة إلى Gemini كخط دفاع ثانٍ
+
+    # ----------------- المحاولة عبر Gemini (النظام الاحتياطي - 15 محاولة) -----------------
+    client_gemini = init_gemini()
+    if not client_gemini:
+        yield "⚠️ عذراً، لم يتم العثور على مفاتيح التشغيل (Groq أو Gemini) بشكل صحيح."
+        return
+
     models_to_try = [
         'gemini-flash-latest',
         'gemini-2.5-flash',
@@ -121,28 +164,24 @@ def call_gemini_stream(client, contents):
     for model_name in models_to_try:
         for attempt in range(3):
             try:
-                stream = client.models.generate_content_stream(
-                    model=model_name, contents=contents)
+                stream = client_gemini.models.generate_content_stream(
+                    model=model_name, contents=contents_list)
                 for chunk in stream:
                     if chunk.text:
                         yield chunk.text
-                return  # نجح!
+                return  # نجح عبر Gemini!
             except Exception as e:
                 err = str(e)
                 if ('503' in err or '429' in err or
                         'UNAVAILABLE' in err or 'overloaded' in err.lower()):
-                    time.sleep(3)  # انتظار 3 ثوانٍ
+                    time.sleep(3)
                     continue
                 else:
-                    # خطأ مختلف (مثل 404) → انتقل للنموذج التالي
                     break
 
-    # استُنفدت كل المحاولات (15 محاولة × 3 ثوانٍ = 45 ثانية انتظار)
-    yield ("⚠️ استُنفدت جميع المحاولات (15 محاولة). الخوادم مزدحمة بشكل غير معتاد.\n\n"
-           "🔹 **انتظر 30-60 دقيقة**، ثم جرب مرة أخرى.\n"
-           "🔹 أو استخدم التطبيق في وقت أقل ازدحاماً (بعد منتصف الليل).\n\n"
-           "⚠️ All 15 attempts failed. Servers are heavily overloaded.\n"
-           "🔹 Wait 30-60 minutes, then try again.")
+    # استُنفدت كل المحاولات
+    yield ("⚠️ استُنفدت جميع المحاولات والبدائل. الخوادم مزدحمة.\n\n"
+           "🔹 **انتظر قليلاً** ثم جرب مرة أخرى.")
 
 
 def get_user_identifier():
@@ -202,10 +241,7 @@ def handle_text_input(prompt):
         st.markdown(prompt)
     st.session_state.chat_history.append({'role': 'user', 'content': prompt})
 
-    client = init_gemini()
     with st.chat_message("assistant"):
-        if not client:
-            return
         recent = st.session_state.chat_history[-7:-1]
         history_text = ""
         for msg in recent:
@@ -226,7 +262,7 @@ def handle_text_input(prompt):
         try:
             placeholder = st.empty()
             full_response = ""
-            for chunk in call_gemini_stream(client, contents):
+            for chunk in call_ai_stream(contents):
                 full_response += chunk
                 check = sanitize_response(full_response)
                 if "أعتذر، لا يمكنني" in check:
@@ -255,7 +291,7 @@ def handle_text_input(prompt):
                     st.rerun()
 
             if len(final) < 500 and ("⚠️" in final or "استُنفدت" in final):
-                st.warning("⚠️ جرب بعد 30-60 دقيقة.")
+                st.warning("⚠️ جرب مرة أخرى.")
                 if st.button("⏩ حاول مرة أخرى الآن", type="primary",
                              use_container_width=True,
                              key=f"retry_{datetime.now().timestamp()}"):
@@ -334,7 +370,7 @@ def render_history_sidebar():
 
 def chat_page():
     st.header("💬 HYDROMEM Chat — المساعد العلمي الذكي")
-    st.markdown("*مدعوم بـ Google Gemini AI*")
+    st.markdown("*مدعوم بـ Groq (Llama 3.3) و Google Gemini*")
     st.markdown("---")
 
     if 'chat_history' not in st.session_state:
@@ -381,6 +417,7 @@ def chat_page():
         with st.chat_message(msg['role']):
             st.markdown(msg['content'])
 
+    st.markdown("---")
     prompt = st.chat_input("اكتب سؤالك...")
     if prompt:
         handle_text_input(prompt)
@@ -388,9 +425,8 @@ def chat_page():
     st.markdown("---")
     st.markdown("""
     **💡 ميزات النسخة الاحترافية:**
-    - 🧠 **الذاكرة:** يتذكر سياق المحادثة.
-    - 📚 **سجل المحادثات:** يعرض كل محادثاتك السابقة.
-    - ⚡ **البث المباشر:** الرد يظهر حرفاً بحرف.
-    - 🔄 **التجاوز التلقائي:** 5 نماذج × 3 محاولات = 15 محاولة.
-    - 🔒 **الحماية:** يمنع تسريب الكود والبنية التحتية.
+    - ⚡ **محرك أساسي فائق السرعة:** يعمل عبر Groq (Llama 3.3).
+    - 🔄 **نظام التبديل التلقائي (Fallback):** يتحول تلقائياً إلى Gemini إذا حدث أي ضغط.
+    - 🧠 **الذاكرة وسجل المحادثات:** محفوظ بالكامل.
+    - 🔒 **الحماية المتقدمة:** مفعلة بالكامل.
     """)
