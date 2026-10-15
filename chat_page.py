@@ -1,10 +1,10 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.6)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.7)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
 #   - Chat History
 #   - Fixed Sanitizer
-#   - Groq Integration with Visible Debugging
+#   - Groq Integration (Using llama-3.1-70b-versatile)
 #   - Gemini Fallback
 # ============================================================
 
@@ -110,7 +110,7 @@ def sanitize_response(text):
 def call_ai_stream(contents_list):
     prompt_text = contents_list[0] if isinstance(contents_list, list) else str(contents_list)
     
-    # ----------------- 1. محاولة Groq (الأساسي) -----------------
+    # ----------------- 1. محاولة Groq (الأساسي والفائق السرعة) -----------------
     if GROQ_AVAILABLE:
         groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
         if groq_key:
@@ -124,7 +124,7 @@ def call_ai_stream(contents_list):
                 ]
                 
                 stream = client_groq.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="llama-3.1-70b-versatile",
                     messages=messages,
                     temperature=0.7,
                     stream=True
@@ -147,9 +147,8 @@ def call_ai_stream(contents_list):
         return
 
     models_to_try = [
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
         'gemini-1.5-flash',
+        'gemini-2.0-flash',
     ]
 
     for model_name in models_to_try:
