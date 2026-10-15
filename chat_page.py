@@ -1,12 +1,11 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.5)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.6)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
 #   - Chat History
 #   - Fixed Sanitizer
-#   - Groq Integration (Primary Fast Engine)
-#   - Original Gemini Retry Behavior (Fallback: 5 models × 3 attempts = 15 total)
-#   - Retry Button
+#   - Groq Integration with Visible Debugging
+#   - Gemini Fallback
 # ============================================================
 
 import streamlit as st
@@ -19,7 +18,6 @@ import time
 import uuid
 from google.genai import types
 
-# محاولة استيراد مكتبة Groq للسرعة الفائقة
 try:
     from groq import Groq
     GROQ_AVAILABLE = True
@@ -110,14 +108,9 @@ def sanitize_response(text):
 
 
 def call_ai_stream(contents_list):
-    """
-    دالة ذكية ومدمجة:
-    1. تحاول أولاً استخدام Groq (سرعة فائقة واستقرار تام).
-    2. إذا فشل Groq أو لم يتوفر المفتاح، تنتقل تلقائياً إلى Gemini (السلوك الاحتياطي 15 محاولة).
-    """
     prompt_text = contents_list[0] if isinstance(contents_list, list) else str(contents_list)
     
-    # ----------------- المحاولة عبر Groq (الخيار الأساسي والأسرع) -----------------
+    # ----------------- 1. محاولة Groq (الأساسي) -----------------
     if GROQ_AVAILABLE:
         groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
         if groq_key:
@@ -143,22 +136,20 @@ def call_ai_stream(contents_list):
                         has_content = True
                         yield chunk.choices[0].delta.content
                 if has_content:
-                    return # نجح الاستدعاء عبر Groq تماماً وبسرعة فائقة!
-            except Exception:
-                pass  # إذا حدث أي خطأ في Groq، ننتقل بسلاسة إلى Gemini كخط دفاع ثانٍ
+                    return
+            except Exception as groq_err:
+                yield f"\n⚠️ [تنبيه Groq]: {str(groq_err)}\nجاري الانتقال لـ Gemini...\n\n"
 
-    # ----------------- المحاولة عبر Gemini (النظام الاحتياطي - 15 محاولة) -----------------
+    # ----------------- 2. محاولة Gemini (الاحتياطي) -----------------
     client_gemini = init_gemini()
     if not client_gemini:
-        yield "⚠️ عذراً، لم يتم العثور على مفاتيح التشغيل (Groq أو Gemini) بشكل صحيح."
+        yield "⚠️ لم يتم العثور على مفتاح Gemini الصحيح."
         return
 
     models_to_try = [
-        'gemini-flash-latest',
         'gemini-2.5-flash',
         'gemini-2.0-flash',
-        'gemini-3.8-flash',
-        'gemini-3.5-flash',
+        'gemini-1.5-flash',
     ]
 
     for model_name in models_to_try:
@@ -169,19 +160,17 @@ def call_ai_stream(contents_list):
                 for chunk in stream:
                     if chunk.text:
                         yield chunk.text
-                return  # نجح عبر Gemini!
+                return
             except Exception as e:
                 err = str(e)
                 if ('503' in err or '429' in err or
                         'UNAVAILABLE' in err or 'overloaded' in err.lower()):
-                    time.sleep(3)
+                    time.sleep(2)
                     continue
                 else:
                     break
 
-    # استُنفدت كل المحاولات
-    yield ("⚠️ استُنفدت جميع المحاولات والبدائل. الخوادم مزدحمة.\n\n"
-           "🔹 **انتظر قليلاً** ثم جرب مرة أخرى.")
+    yield ("⚠️ فشلت جميع المحاولات. تحقق من صحة المفاتيح والأذونات.")
 
 
 def get_user_identifier():
@@ -264,11 +253,6 @@ def handle_text_input(prompt):
             full_response = ""
             for chunk in call_ai_stream(contents):
                 full_response += chunk
-                check = sanitize_response(full_response)
-                if "أعتذر، لا يمكنني" in check:
-                    full_response = check
-                    placeholder.markdown(full_response)
-                    break
                 placeholder.markdown(full_response + "▌")
 
             final = sanitize_response(full_response)
@@ -288,17 +272,6 @@ def handle_text_input(prompt):
             with col2:
                 if st.button("🔄 إعادة توليد", key=f"re_{datetime.now().timestamp()}"):
                     st.session_state.chat_history.pop()
-                    st.rerun()
-
-            if len(final) < 500 and ("⚠️" in final or "استُنفدت" in final):
-                st.warning("⚠️ جرب مرة أخرى.")
-                if st.button("⏩ حاول مرة أخرى الآن", type="primary",
-                             use_container_width=True,
-                             key=f"retry_{datetime.now().timestamp()}"):
-                    if len(st.session_state.chat_history) >= 2:
-                        st.session_state.chat_history.pop()
-                        st.session_state.chat_history.pop()
-                    save_current_session()
                     st.rerun()
         except Exception as e:
             st.error(f"❌ خطأ: {str(e)}")
@@ -370,7 +343,7 @@ def render_history_sidebar():
 
 def chat_page():
     st.header("💬 HYDROMEM Chat — المساعد العلمي الذكي")
-    st.markdown("*مدعوم بـ Groq (Llama 3.3) و Google Gemini*")
+    st.markdown("*مدعوم بـ Groq و Google Gemini*")
     st.markdown("---")
 
     if 'chat_history' not in st.session_state:
@@ -421,12 +394,3 @@ def chat_page():
     prompt = st.chat_input("اكتب سؤالك...")
     if prompt:
         handle_text_input(prompt)
-
-    st.markdown("---")
-    st.markdown("""
-    **💡 ميزات النسخة الاحترافية:**
-    - ⚡ **محرك أساسي فائق السرعة:** يعمل عبر Groq (Llama 3.3).
-    - 🔄 **نظام التبديل التلقائي (Fallback):** يتحول تلقائياً إلى Gemini إذا حدث أي ضغط.
-    - 🧠 **الذاكرة وسجل المحادثات:** محفوظ بالكامل.
-    - 🔒 **الحماية المتقدمة:** مفعلة بالكامل.
-    """)
