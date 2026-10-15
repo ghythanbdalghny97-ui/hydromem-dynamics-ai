@@ -1,10 +1,10 @@
 # ============================================================
-# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.7)
+# HYDROMEM Chat - AI Medical & Scientific Assistant (v2.8)
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # Features:
 #   - Chat History
 #   - Fixed Sanitizer
-#   - Groq Integration (Using llama-3.1-70b-versatile)
+#   - Groq Integration (Using llama-3.3-70b-versatile)
 #   - Gemini Fallback
 # ============================================================
 
@@ -124,7 +124,7 @@ def call_ai_stream(contents_list):
                 ]
                 
                 stream = client_groq.chat.completions.create(
-                    model="llama-3.1-70b-versatile",
+                    model="llama-3.3-70b-versatile",
                     messages=messages,
                     temperature=0.7,
                     stream=True
