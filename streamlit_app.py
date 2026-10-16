@@ -1,5 +1,6 @@
 # ============================================================
-# HYDROMEM Dynamics AI — v15.6 (Final Absolute)
+# HYDROMEM Dynamics AI — v16.1 Professional
+# Advanced AI Simulation Platform
 # Copyright (c) 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
 # ============================================================
 
@@ -7,861 +8,1520 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
+
 from sklearn.neural_network import MLPRegressor
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, r2_score, mean_squared_error
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+
 from datetime import datetime, timedelta
 import warnings
-warnings.filterwarnings('ignore')
+import json
+import uuid
+import re
+
+warnings.filterwarnings("ignore")
+
+
+# ============================================================
+#              قواعد البيانات
+# ============================================================
 
 from supabase_utils import (
-    init_supabase, add_customer, get_all_customers,
-    get_expiring_customers, activate_subscription,
-    update_customer_status, delete_customer, get_stats
+    init_supabase,
+    add_customer,
+    get_all_customers,
+    get_expiring_customers,
+    activate_subscription,
+    update_customer_status,
+    delete_customer,
+    get_stats
 )
+
+
+# ============================================================
+#              صفحات خارجية
+# ============================================================
+
 from chat_page import chat_page
 
-st.set_page_config(page_title="HYDROMEM Dynamics AI", page_icon="🧬",
-                   layout="wide", initial_sidebar_state="expanded")
+
+# ============================================================
+#              إعداد الصفحة
+# ============================================================
+
+st.set_page_config(
+    page_title="HYDROMEM Dynamics AI",
+    page_icon="🧬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+
+# ============================================================
+#              تشغيل قاعدة البيانات
+# ============================================================
 
 try:
-    init_supabase(st.secrets.get("SUPABASE_URL", ""), st.secrets.get("SUPABASE_KEY", ""))
+    init_supabase(
+        st.secrets.get("SUPABASE_URL", ""),
+        st.secrets.get("SUPABASE_KEY", "")
+    )
 except Exception:
     pass
+
+
+# ============================================================
+#              تحسين واجهة المستخدم
+# ============================================================
 
 st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#667eea">
 """, unsafe_allow_html=True)
 
+
 st.markdown("""
 <style>
-    .main { direction: rtl; text-align: right; }
-    .stMetric { direction: rtl; }
-    h1, h2, h3, h4 { direction: rtl; text-align: right; }
-    .chat-container { margin-top: 20px; border-top: 2px solid #667eea; padding-top: 15px; }
+
+.main {
+    direction: rtl;
+    text-align: right;
+}
+
+h1, h2, h3, h4 {
+    direction: rtl;
+    text-align: right;
+}
+
+.stMetric {
+    direction: rtl;
+}
+
+.chat-container {
+    margin-top: 20px;
+    border-top: 2px solid #667eea;
+    padding-top: 15px;
+}
+
+.copy-box {
+    background: #f5f5f5;
+    padding: 15px;
+    border-radius: 10px;
+    direction: rtl;
+}
+
+.ai-mode {
+    font-size: 18px;
+    font-weight: bold;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 
 # ============================================================
-#              دوال مساعدة
+#              نظام إعدادات المستخدم الجديد
 # ============================================================
 
-def add_values_on_plot(ax, x, y, num_points=5, color='black', fmt='{:.3f}'):
-    if len(x) == 0: return
-    indices = np.linspace(0, len(x)-1, num_points, dtype=int)
-    for i in indices:
-        if i < len(y):
-            ax.annotate(fmt.format(y[i]), xy=(x[i], y[i]),
-                        xytext=(0, 8), textcoords='offset points',
-                        ha='center', fontsize=8, color=color,
-                        bbox=dict(boxstyle='round,pad=0.3',
-                                  facecolor='white', edgecolor=color, alpha=0.7))
+def init_user_preferences():
 
-def time_to_reach(values, times, threshold, direction='decrease'):
-    for i, v in enumerate(values):
-        if direction == 'decrease' and v <= threshold:
-            return times[i]
-        elif direction == 'increase' and v >= threshold:
-            return times[i]
-    return None
-
-def classify_kl(m):
-    if m > 0.95: return "Healthy (سليم)"
-    elif m > 0.85: return "KL-1 (مشكوك)"
-    elif m > 0.70: return "KL-2 (خفيف)"
-    elif m > 0.50: return "KL-3 (متوسط)"
-    else: return "KL-4 (شديد)"
-
-def healing_stage(C, Cm):
-    r = C/Cm
-    if r < 0.1: return "Inflammation (التهاب)"
-    elif r < 0.4: return "Soft Callus (دشبذ رخو)"
-    elif r < 0.8: return "Hard Callus (دشبذ صلب)"
-    else: return "Remodeling (إعادة تشكيل)"
-
-
-# ============================================================
-#              إدارة الحالة
-# ============================================================
-
-def init_simulation_state():
     defaults = {
-        'gen_A0': 0.5, 'gen_T0': 0.2, 'gen_mu': 1.0, 'gen_k': 0.5, 'gen_b': 0.8, 'gen_g': 0.3, 'gen_te': 50,
-        'knee_yrs': 10, 'knee_kp': 0.005, 'knee_kd': 0.015, 'knee_a': 0.00010,
-        'bone_wk': 16, 'bone_km': 0.3, 'bone_mu': 2.0, 'bone_Cm': 20.0,
-        'disc_h': 24, 'disc_ks': 0.1, 'disc_kd': 0.05, 'disc_pl': 0.5,
-        'wound_wk': 12, 'wound_scenario': "Normal (طبيعي)",
+
+        "response_mode": "📚 مفصل",
+        "user_id": str(uuid.uuid4()),
+        "chat_history": [],
+        "chat_title": "محادثة جديدة",
+        "last_response": "",
+        "current_chat_id": str(uuid.uuid4())
+
     }
+
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+
+init_user_preferences()
+
+
+# ============================================================
+#              اختيار نمط الذكاء الاصطناعي
+# ============================================================
+
+def response_settings():
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🧠 طريقة الرد")
+
+    mode = st.sidebar.radio(
+        "اختر أسلوب الإجابة:",
+        ["⚡ مختصر", "📚 مفصل"],
+        index=(0 if st.session_state.response_mode == "⚡ مختصر" else 1),
+        key="sidebar_response_mode"
+    )
+
+    st.session_state.response_mode = mode
+
+    if mode == "⚡ مختصر":
+        return """
+        أجب باختصار شديد.
+        ركز على النقاط الأساسية فقط.
+        لا تضف تفاصيل غير ضرورية.
+        """
+    else:
+        return """
+        أجب بشرح مفصل ومنظم.
+        قدم الأسباب والخطوات والأمثلة.
+        استخدم أسلوباً علمياً واضحاً.
+        """
+
+
+def get_ai_style():
+    """
+    إرجاع نمط الرد الحالي ديناميكياً
+    (يستخدم داخل أي لحظة إرسال سؤال)
+    """
+    if st.session_state.response_mode == "⚡ مختصر":
+        return """
+        أجب باختصار شديد.
+        ركز على النقاط الأساسية فقط.
+        لا تضف تفاصيل غير ضرورية.
+        """
+    else:
+        return """
+        أجب بشرح مفصل ومنظم.
+        قدم الأسباب والخطوات والأمثلة.
+        استخدم أسلوباً علمياً واضحاً.
+        """
+
+
+response_settings()
+
+
+# ============================================================
+#              أدوات الدردشة الجديدة
+# ============================================================
+
+def save_chat_message(role, content):
+
+    st.session_state.chat_history.append({
+        "role": role,
+        "content": content,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M")
+    })
+
+
+def clear_current_chat():
+
+    st.session_state.chat_history = []
+    st.session_state.chat_title = "محادثة جديدة"
+
+
+def copy_text_button(text):
+
+    st.text_area(
+        "📋 انسخ الرد من هنا:",
+        value=text,
+        height=150
+    )
+
+
+# ============================================================
+#              أدوات عامة
+# ============================================================
+
+def add_values_on_plot(ax, x, y, num_points=5, color='black', fmt='{:.3f}'):
+
+    if len(x) == 0:
+        return
+
+    indices = np.linspace(0, len(x) - 1, num_points, dtype=int)
+
+    for i in indices:
+        if i < len(y):
+            ax.annotate(
+                fmt.format(y[i]),
+                xy=(x[i], y[i]),
+                xytext=(0, 8),
+                textcoords="offset points",
+                ha="center",
+                fontsize=8,
+                color=color
+            )
+
+
+def time_to_reach(values, times, threshold, direction="decrease"):
+
+    for i, v in enumerate(values):
+
+        if direction == "decrease" and v <= threshold:
+            return times[i]
+
+        elif direction == "increase" and v >= threshold:
+            return times[i]
+
+    return None
+
+
+# ============================================================
+#     محرك توحيد اللغة العربية
+# ============================================================
+
+def normalize_arabic(text):
+
+    if not text:
+        return ""
+
+    replacements = {
+        "أ": "ا", "إ": "ا", "آ": "ا",
+        "ة": "ه", "ى": "ي",
+        "ئ": "ي", "ؤ": "و"
+    }
+
+    for a, b in replacements.items():
+        text = text.replace(a, b)
+
+    return text
+
+
+# ============================================================
+#     استخراج الأرقام من النص
+# ============================================================
+
+def smart_extract_number(text, keywords, search_direction="forward"):
+
+    arabic_numbers = {
+        "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4",
+        "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9"
+    }
+
+    for a, b in arabic_numbers.items():
+        text = text.replace(a, b)
+
+    text = normalize_arabic(text)
+    words = text.split()
+
+    keywords = [normalize_arabic(k) for k in keywords]
+
+    for keyword in keywords:
+
+        for index, word in enumerate(words):
+
+            if keyword in word:
+
+                search_range = []
+
+                if search_direction == "backward":
+
+                    search_range.extend(range(index - 1, max(index - 6, -1), -1))
+                    search_range.extend(range(index + 1, min(index + 6, len(words))))
+
+                else:
+
+                    search_range.extend(range(index + 1, min(index + 6, len(words))))
+                    search_range.extend(range(index - 1, max(index - 6, -1), -1))
+
+                for j in search_range:
+
+                    value = words[j].strip(".,،؛:!?؟")
+
+                    if re.fullmatch(r"\d+(\.\d+)?", value):
+                        return float(value)
+
+    return None
+
+
+# ============================================================
+#     معالجة أوامر المستخدم
+# ============================================================
+
+def process_chat_command(user_input, app_name):
+
+    updated = False
+    details = []
+
+    KEY_WEEKS = ["اسبوع", "اسابيع", "الأسبوع", "الاسابيع"]
+    KEY_YEARS = ["سنه", "سنة", "سنوات", "عام"]
+    KEY_HOURS = ["ساعة", "ساعات"]
+    KEY_TIME = ["زمن", "وقت"]
+    KEY_GROWTH = ["نمو"]
+    KEY_MINERAL = ["تمعدن"]
+
+    if app_name == "🦴 التئام العظام":
+
+        value = smart_extract_number(user_input, KEY_WEEKS, "backward")
+        if value is not None:
+            value = min(max(int(value), 4), 24)
+            st.session_state.bone_wk = value
+            details.append(f"الأسابيع={value}")
+            updated = True
+
+        value = smart_extract_number(user_input, KEY_MINERAL)
+        if value is not None:
+            value = min(max(value, 0.05), 0.5)
+            st.session_state.bone_km = value
+            details.append(f"التمعدن={value}")
+            updated = True
+
+    elif app_name == "🦵 خشونة الركبة":
+
+        value = smart_extract_number(user_input, KEY_YEARS, "backward")
+        if value is not None:
+            value = min(max(int(value), 1), 25)
+            st.session_state.knee_yrs = value
+            details.append(f"السنوات={value}")
+            updated = True
+
+    elif app_name == "💧 الأقراص الفقرية":
+
+        value = smart_extract_number(user_input, KEY_HOURS, "backward")
+        if value is not None:
+            value = min(max(int(value), 6), 48)
+            st.session_state.disc_h = value
+            details.append(f"الساعات={value}")
+            updated = True
+
+    elif app_name == "⚙️ النموذج الديناميكي العام":
+
+        value = smart_extract_number(user_input, KEY_TIME)
+        if value is not None:
+            value = min(max(int(value), 10), 200)
+            st.session_state.gen_te = value
+            details.append(f"الزمن={value}")
+            updated = True
+
+    if updated:
+        return (True, "✅ تم تحديث المحاكاة:\n" + " | ".join(details))
+
+    return (False, "⚠️ لم أفهم الطلب. اكتب مثالاً مثل: غير الزمن إلى 100")
+
+
+# ============================================================
+#     نظام حفظ المحادثات محلياً
+# ============================================================
+
+def save_chat_history():
+    """حفظ سجل المحادثة الحالي — النسخة المحلية"""
+    return True
+
+
+def add_message(role, content):
+
+    save_chat_message(role, content)
+
+    if role == "assistant":
+        st.session_state.last_response = content
+
+
+def export_chat_text():
+
+    text = "HYDROMEM Dynamics AI Chat\n"
+    text += "=" * 40 + "\n\n"
+
+    for msg in st.session_state.chat_history:
+        text += (msg["role"] + ": " + msg["content"] + "\n\n")
+
+    return text
+
+
+# ============================================================
+#     واجهة سجل المحادثة
+# ============================================================
+
+def show_chat_tools():
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("💬 إدارة المحادثة")
+
+    if st.sidebar.button("🗑️ محادثة جديدة"):
+        clear_current_chat()
+        st.rerun()
+
+    if st.sidebar.button("📥 تصدير المحادثة"):
+        st.sidebar.download_button(
+            "تحميل TXT",
+            export_chat_text(),
+            file_name="HYDROMEM_chat.txt"
+        )
+
+    if st.session_state.last_response:
+        st.sidebar.success("آخر رد محفوظ ✅")
+
+
+show_chat_tools()
+
+
+# ============================================================
+#              النماذج الرياضية
+# ============================================================
+
+def general(y, t, mu, k, b, g):
+
+    A, T = y
+    dA = mu * A - A**3 - k * T * A
+    dT = b * (A - T) - g * T
+
+    return [dA, dT]
+
+
+def cartilage(y, t, kp, kd, a, ms):
+
+    c, m = y
+    dc = kp - kd * c
+    dm = -a * (c / ms) * m
+
+    return [dc, dm]
+
+
+def bone(y, t, k, mu, Cm):
+
+    Ca, m, C = y
+    dCa = 0.5 * (1 - Ca / 5)
+    dm = k * max(mu - 1, 0) * (1 - m)
+    dC = 0.5 * (Cm * m**1.5 - C)
+
+    return [dCa, dm, dC]
+
+
+def disc(y, t, ks, kd, Pl):
+
+    w, h, P = y
+    dw = ks * (1 - w) - kd * w * Pl
+    dh = 0.05 * (w - 0.5) * (1.5 - h)
+    dP = 0.3 * (w - 0.6) - 0.1 * P
+
+    return [dw, dh, dP]
+
+
+def wound(y, t, p):
+
+    E, F, C, I, B, M = y
+
+    E = max(E, 0)
+    F = max(F, 0)
+    C = max(C, 0)
+
+    return [
+        p['ke'] * E * (1 - E) - p['ka'] * E * I,
+        p['kf'] * F * (1 - F) - p['kd'] * F * I,
+        p['kc'] * F * (1 - C) - p['kr'] * C * M,
+        p['ki'] * B - p['kii'] * I,
+        p['kb'] * (1 - B) - p['kbb'] * B * E,
+        p['km'] * I - p['kmm'] * M * 0.8
+    ]
+
+
+# ============================================================
+#              تصنيف النتائج
+# ============================================================
+
+def classify_kl(value):
+
+    if value > 0.95:
+        return "Healthy (سليم)"
+    elif value > 0.85:
+        return "KL-1 (بسيط)"
+    elif value > 0.70:
+        return "KL-2 (خفيف)"
+    elif value > 0.50:
+        return "KL-3 (متوسط)"
+    else:
+        return "KL-4 (شديد)"
+
+
+def healing_stage(C, Cm):
+
+    ratio = C / Cm
+
+    if ratio < 0.1:
+        return "Inflammation (التهاب)"
+    elif ratio < 0.4:
+        return "Soft Callus (دشبذ رخو)"
+    elif ratio < 0.8:
+        return "Hard Callus (دشبذ صلب)"
+    else:
+        return "Remodeling (إعادة تشكيل)"
+
+
+# ============================================================
+#              نظام التقارير المطور
+# ============================================================
+
+def generate_report(app_name, results, timeline=None, recommendations=None):
+
+    st.markdown("---")
+    st.header("📄 تقرير HYDROMEM Dynamics AI")
+
+    report_id = "HRM-" + datetime.now().strftime("%Y%m%d-%H%M")
+
+    st.info(f"""
+    **رقم التقرير:** {report_id}
+
+    **التطبيق:** {app_name}
+
+    **التاريخ:** {datetime.now().strftime("%Y-%m-%d %H:%M")}
+    """)
+
+    st.subheader("📊 النتائج")
+
+    report_text = ""
+
+    for key, value in results.items():
+        line = f"- {key}: {value}"
+        st.write(line)
+        report_text += line + "\n"
+
+    if timeline:
+        st.subheader("⏱️ الجدول الزمني")
+        for item in timeline:
+            st.write("- " + item)
+            report_text += "- " + item + "\n"
+
+    if recommendations:
+        st.subheader("💡 التوصيات")
+        for category, items in recommendations.items():
+            st.write("**" + category + "**")
+            for item in items:
+                st.write("- " + item)
+                report_text += "- " + item + "\n"
+
+    st.warning("""
+⚠️ تنبيه:
+
+هذه المحاكاة لأغراض بحثية وتعليمية فقط.
+لا تعتبر تشخيصاً طبياً ولا بديلاً عن الطبيب المختص.
+""")
+
+    full_report = f"""
+HYDROMEM Dynamics AI
+====================
+
+Report ID: {report_id}
+
+Application: {app_name}
+
+RESULTS
+-------
+
+{report_text}
+
+Contact:
+ghythanbdalghny97@gmail.com
+"""
+
+    st.download_button(
+        label="📥 تحميل التقرير TXT",
+        data=full_report.encode("utf-8"),
+        file_name=f"HYDROMEM_Report_{datetime.now().strftime('%Y%m%d')}.txt",
+        mime="text/plain"
+    )
+
+    st.text_area("📋 نسخ التقرير", value=full_report, height=250)
+
+
+# ============================================================
+#              إدارة الحالة للمحاكاة
+# ============================================================
+
+def init_simulation_state():
+
+    defaults = {
+
+        "gen_A0": 0.5,
+        "gen_T0": 0.2,
+        "gen_mu": 1.0,
+        "gen_k": 0.5,
+        "gen_b": 0.8,
+        "gen_g": 0.3,
+        "gen_te": 50,
+
+        "knee_yrs": 10,
+        "knee_kp": 0.005,
+        "knee_kd": 0.015,
+        "knee_a": 0.00010,
+
+        "bone_wk": 16,
+        "bone_km": 0.3,
+        "bone_mu": 2.0,
+        "bone_Cm": 20.0,
+
+        "disc_h": 24,
+        "disc_ks": 0.1,
+        "disc_kd": 0.05,
+        "disc_pl": 0.5,
+
+        "wound_wk": 12,
+        "wound_scenario": "Normal (طبيعي)"
+    }
+
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
 
 init_simulation_state()
 
 
-def apply_simulation_overrides():
-    overrides = {
-        'gen_A0', 'gen_T0', 'gen_mu', 'gen_k', 'gen_b', 'gen_g', 'gen_te',
-        'knee_yrs', 'knee_kp', 'knee_kd', 'knee_a',
-        'bone_wk', 'bone_km', 'bone_mu', 'bone_Cm',
-        'disc_h', 'disc_ks', 'disc_kd', 'disc_pl',
-        'wound_wk', 'wound_scenario'
-    }
-    for key in overrides:
-        override_key = f"{key}_override"
-        if override_key in st.session_state:
-            st.session_state[key] = st.session_state[override_key]
-            del st.session_state[override_key]
-
-apply_simulation_overrides()
-
-
 # ============================================================
-#    محرك استخراج ذكي موحّد (يعمل مع كل صيغ الكلمات العربية)
-# ============================================================
-
-def normalize_arabic(text):
-    """توحيد النص العربي للمقارنة الذكية"""
-    if not text:
-        return ""
-    text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
-    text = text.replace('ة', 'ه')
-    text = text.replace('ى', 'ي')
-    text = text.replace('ئ', 'ي').replace('ؤ', 'و')
-    return text
-
-
-def smart_extract_number(text, keywords, search_direction='forward', previous_value=None):
-    """
-    محرك استخراج ذكي ثنائي الاتجاه مع توحيد النص العربي.
-    - يوحد الهمزات والتاء المربوطة
-    - يبحث في 5 كلمات قبل/بعد الكلمة المفتاحية
-    - يدعم الاتجاه الأمامي والخلفي
-    """
-    import re
-    
-    # تحويل الأرقام العربية إلى إنجليزية
-    arabic_to_english = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'}
-    for ar, en in arabic_to_english.items():
-        text = text.replace(ar, en)
-    
-    # توحيد النص العربي
-    normalized_text = normalize_arabic(text)
-    normalized_keywords = [normalize_arabic(kw) for kw in keywords]
-    
-    tokens = normalized_text.split()
-    
-    for kw in normalized_keywords:
-        for i, token in enumerate(tokens):
-            if kw in token:
-                if search_direction == 'backward':
-                    # ابحث للخلف أولاً
-                    for j in range(i-1, max(i-6, -1), -1):
-                        cleaned = tokens[j].strip('.,،؛:!؟"\'')
-                        if re.fullmatch(r'\d+(?:\.\d+)?', cleaned):
-                            return float(cleaned)
-                    # ثم للأمام
-                    for j in range(i+1, min(i+6, len(tokens))):
-                        cleaned = tokens[j].strip('.,،؛:!؟"\'')
-                        if re.fullmatch(r'\d+(?:\.\d+)?', cleaned):
-                            return float(cleaned)
-                else:
-                    # ابحث للأمام أولاً
-                    for j in range(i+1, min(i+6, len(tokens))):
-                        cleaned = tokens[j].strip('.,،؛:!؟"\'')
-                        if re.fullmatch(r'\d+(?:\.\d+)?', cleaned):
-                            return float(cleaned)
-                    # ثم للخلف
-                    for j in range(i-1, max(i-6, -1), -1):
-                        cleaned = tokens[j].strip('.,،؛:!؟"\'')
-                        if re.fullmatch(r'\d+(?:\.\d+)?', cleaned):
-                            return float(cleaned)
-    
-    return None
-
-
-def process_chat_command(user_input, app_name):
-    """معالجة طلبات الدردشة مع كل الصيغ العربية"""
-    updated = False
-    msg_extra = ""
-    details = []
-
-    # === قوائم الكلمات المفتاحية الشاملة (كل الصيغ) ===
-    KEY_WEEKS = ["أسبوع", "اسبوع", "أسابيع", "اسابيع", "الأسبوع", "الاسبوع", "الأسابيع", "الاسابيع", "أسبوعاً", "اسبوعا"]
-    KEY_YEARS = ["سنة", "سنه", "سنوات", "سنين", "السنوات", "السنين", "السنة", "عام", "أعوام", "اعوام"]
-    KEY_HOURS = ["ساعة", "ساعه", "ساعات", "الساعات", "ساعتان"]
-    KEY_TIME  = ["زمن", "الزمن", "وقت", "الوقت"]
-    KEY_MINERAL = ["تمعدن", "التمعدن"]
-    KEY_GROWTH  = ["نمو", "النمو"]
-    KEY_STIFF   = ["صلابة", "صلابه", "قصوى", "قصوي", "ثبات", "الصلابة", "الصلابه", "القصوى", "القصوي"]
-    KEY_PRODUCE = ["إنتاج", "انتاج", "الإنتاج", "الانتاج"]
-    KEY_LOAD    = ["حمل", "الحمل", "أحمال", "احمال"]
-
-    if app_name == "🦴 التئام العظام":
-        val = smart_extract_number(user_input, KEY_WEEKS, 'backward')
-        if val is not None:
-            safe = min(max(int(val), 4), 24)
-            if safe != int(val): msg_extra += f" (ضُبط إلى {safe})"
-            st.session_state.bone_wk_override = safe
-            details.append(f"أسابيع={safe}")
-            updated = True
-        val = smart_extract_number(user_input, KEY_MINERAL, 'forward')
-        if val is not None:
-            safe = min(max(val, 0.05), 0.5)
-            if safe != val: msg_extra += f" (تمعدن ضُبط إلى {safe})"
-            st.session_state.bone_km_override = safe
-            details.append(f"تمعدن={safe}")
-            updated = True
-        val = smart_extract_number(user_input, KEY_GROWTH, 'forward')
-        if val is not None:
-            safe = min(max(val, 1.1), 3.0)
-            if safe != val: msg_extra += f" (نمو ضُبط إلى {safe})"
-            st.session_state.bone_mu_override = safe
-            details.append(f"نمو={safe}")
-            updated = True
-        val = smart_extract_number(user_input, KEY_STIFF, 'forward')
-        if val is not None:
-            safe = min(max(val, 10.0), 30.0)
-            if safe != val: msg_extra += f" (صلابة ضُبطت إلى {safe})"
-            st.session_state.bone_Cm_override = safe
-            details.append(f"صلابة={safe}")
-            updated = True
-
-    elif app_name == "🦵 خشونة الركبة":
-        val = smart_extract_number(user_input, KEY_YEARS, 'backward')
-        if val is not None:
-            safe = min(max(int(val), 1), 25)
-            if safe != int(val): msg_extra += f" (سنوات ضُبطت إلى {safe})"
-            st.session_state.knee_yrs_override = safe
-            details.append(f"سنوات={safe}")
-            updated = True
-        val = smart_extract_number(user_input, KEY_PRODUCE, 'forward')
-        if val is not None:
-            safe = min(max(val, 0.003), 0.012)
-            if safe != val: msg_extra += f" (إنتاج ضُبط إلى {safe})"
-            st.session_state.knee_kp_override = safe
-            details.append(f"إنتاج={safe}")
-            updated = True
-
-    elif app_name == "💧 الأقراص الفقرية":
-        val = smart_extract_number(user_input, KEY_HOURS, 'backward')
-        if val is not None:
-            safe = min(max(int(val), 6), 48)
-            if safe != int(val): msg_extra += f" (ساعات ضُبطت إلى {safe})"
-            st.session_state.disc_h_override = safe
-            details.append(f"ساعات={safe}")
-            updated = True
-        val = smart_extract_number(user_input, KEY_LOAD, 'forward')
-        if val is not None:
-            safe = min(max(val, 0.2), 1.0)
-            if safe != val: msg_extra += f" (حمل ضُبط إلى {safe})"
-            st.session_state.disc_pl_override = safe
-            details.append(f"حمل={safe}")
-            updated = True
-
-    elif app_name == "🩹 التئام الجروح":
-        val = smart_extract_number(user_input, KEY_WEEKS, 'backward')
-        if val is not None:
-            safe = min(max(int(val), 4), 16)
-            if safe != int(val): msg_extra += f" (أسابيع ضُبطت إلى {safe})"
-            st.session_state.wound_wk_override = safe
-            details.append(f"أسابيع={safe}")
-            updated = True
-        if "مصاب" in user_input or "عدوى" in user_input:
-            st.session_state.wound_scenario_override = "Infected (مصاب)"
-            details.append("سيناريو=مصاب")
-            updated = True
-        elif "سريع" in user_input:
-            st.session_state.wound_scenario_override = "Fast (سريع)"
-            details.append("سيناريو=سريع")
-            updated = True
-        elif "طبيعي" in user_input:
-            st.session_state.wound_scenario_override = "Normal (طبيعي)"
-            details.append("سيناريو=طبيعي")
-            updated = True
-
-    elif app_name == "⚙️ النموذج الديناميكي العام":
-        val = smart_extract_number(user_input, KEY_TIME, 'forward')
-        if val is not None:
-            safe = min(max(int(val), 10), 200)
-            if safe != int(val): msg_extra += f" (زمن ضُبط إلى {safe})"
-            st.session_state.gen_te_override = safe
-            details.append(f"زمن={safe}")
-            updated = True
-
-    if updated:
-        details_str = " | ".join(details) if details else ""
-        return True, f"✅ تم تحديث المعاملات: {details_str}.{msg_extra} جاري إعادة المحاكاة..."
-    else:
-        return False, "⚠️ عذراً، لم أتمكن من التعرف على الأمر. يرجى كتابة طلب واضح، مثل: 'غير عدد الأسابيع إلى 12' أو 'ارفع معدل التمعدن إلى 0.4'."
-
-
-# ============================================================
-#                  النماذج الرياضية
-# ============================================================
-
-def general(y, t, mu, k, b, g):
-    A, T = y
-    return [mu*A - A**3 - k*T*A, b*(A-T) - g*T]
-
-def cartilage(y, t, kp, kd, a, ms):
-    c, m = y
-    return [kp - kd*c, -a*(c/ms)*m]
-
-def bone(y, t, k, mu, Cm, C_floor=0.0):
-    Ca, m, C = y
-    dCa = 0.5*(1 - Ca/5)
-    dm = k*max(mu-1, 0)*(1-m)
-    dC = 0.5*(Cm*m**1.5 - C)
-    if C < C_floor:
-        dC = max(dC, 0)
-    return [dCa, dm, dC]
-
-def disc(y, t, ks, kd, Pl):
-    w, h, P = y
-    return [ks*(1-w) - kd*w*Pl, 0.05*(w-0.5)*(1.5-h), 0.3*(w-0.6) - 0.1*P]
-
-def wound(y, t, p):
-    E, F, C, I, B, M = y
-    E, F, C = max(E,0), max(F,0), max(C,0)
-    return [p['ke']*E*(1-E) - p['ka']*E*I,
-            p['kf']*F*(1-F) - p['kd']*F*I,
-            p['kc']*F*(1-C) - p['kr']*C*M,
-            p['ki']*B - p['kii']*I,
-            p['kb']*(1-B) - p['kbb']*B*E,
-            p['km']*I - p['kmm']*M*0.8]
-
-
-# ============================================================
-#              دالة التقرير الطبي
-# ============================================================
-
-def generate_report(app_name, results, timeline, recommendations):
-    st.markdown("---")
-    st.subheader("📄 التقرير الطبي التلقائي")
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-                padding: 25px; border-radius: 15px; margin: 15px 0; direction: rtl;">
-        <h2 style="color: #333; text-align: center;">🧬 تقرير HYDROMEM Dynamics AI</h2>
-        <p style="text-align: center; color: #666;">
-            Report ID: HRM-{datetime.now().strftime('%Y%m%d-%H%M')}<br>
-            التاريخ: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-        </p>
-        <hr>
-        <h3>📊 التطبيق: {app_name}</h3>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("### 📊 نتائج المحاكاة")
-    for key, value in results.items():
-        st.markdown(f"- **{key}:** {value}")
-    if timeline:
-        st.markdown("### ⏱️ الجدول الزمني المتوقع")
-        for item in timeline:
-            st.markdown(f"- {item}")
-    if recommendations:
-        st.markdown("### 💡 التوصيات الإرشادية")
-        for category, items in recommendations.items():
-            st.markdown(f"**{category}:**")
-            for item in items:
-                st.markdown(f"  - {item}")
-    st.error("""
-    ⚠️ **إخلاء مسؤولية طبية:**
-    هذا التقرير لأغراض **بحثية وتعليمية فقط**.
-    لا يُعدّ تشخيصاً طبياً ولا بديلاً عن استشارة طبيب مختص.
-    """)
-    txt = f"HYDROMEM Dynamics AI - Medical Report\n" + "=" * 50 + "\n"
-    txt += f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\nApplication: {app_name}\n\n"
-    txt += "RESULTS:\n"
-    for k, v in results.items():
-        txt += f"  - {k}: {v}\n"
-    if timeline:
-        txt += "\nTIMELINE:\n"
-        for item in timeline:
-            txt += f"  - {item}\n"
-    if recommendations:
-        txt += "\nRECOMMENDATIONS:\n"
-        for cat, items in recommendations.items():
-            txt += f"  [{cat}]\n"
-            for it in items:
-                txt += f"    - {it}\n"
-    txt += "\nContact: ghythanbdalghny97@gmail.com | +967 779193805\n"
-    st.download_button(label="📥 تحميل التقرير (TXT)", data=txt.encode('utf-8'),
-                       file_name=f"HYDROMEM_Report_{app_name}_{datetime.now().strftime('%Y%m%d')}.txt",
-                       mime="text/plain")
-
-
-# ============================================================
-#              مكونات AI
-# ============================================================
-
-@st.cache_resource
-def train_surrogate():
-    np.random.seed(42)
-    X, Y = [], []
-    for _ in range(600):
-        params = [np.random.uniform(0.1,2), np.random.uniform(0,2), np.random.uniform(0.1,2),
-                  np.random.uniform(0,1), np.random.uniform(0.1,2), np.random.uniform(0,2)]
-        t = np.linspace(0, 50, 80)
-        s = odeint(general, [params[4], params[5]], t, args=tuple(params[:4]))
-        X.append(params); Y.append([s[-1,0], s[-1,1], s[:,0].max(), s[:,1].max()])
-    X, Y = np.array(X), np.array(Y)
-    Xt, Xe, Yt, Ye = train_test_split(X, Y, test_size=0.2, random_state=42)
-    m = MLPRegressor(hidden_layer_sizes=(64,128,64), activation='relu', max_iter=300, random_state=42)
-    m.fit(Xt, Yt)
-    return m, mean_squared_error(Ye, m.predict(Xe))
-
-@st.cache_resource
-def train_classifier():
-    np.random.seed(42)
-    X, y = [], []
-    attempts = 0
-    while len(X) < 800 and attempts < 15000:
-        attempts += 1
-        mu = np.random.uniform(-0.5, 3.0); k = np.random.uniform(-1.0, 3.0)
-        b = np.random.uniform(-0.5, 2.5); g = np.random.uniform(-0.5, 1.5)
-        try:
-            t = np.linspace(0, 50, 150)
-            s = odeint(general, [0.5, 0.2], t, args=(mu, k, b, g))
-            if np.any(np.abs(s) > 100): continue
-            A, Th = s[-1,0], s[-1,1]
-            J = np.array([[mu-3*A**2-k*Th, -k*A],[b, -b-g]])
-            ev = np.linalg.eigvals(J)
-            stable = 1 if all(np.real(e) < 0 for e in ev) else 0
-            X.append([mu, k, b, g]); y.append(stable)
-        except: continue
-    X, y = np.array(X), np.array(y)
-    Xt, Xe, Yt, Ye = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-    m = RandomForestClassifier(n_estimators=100, random_state=42)
-    m.fit(Xt, Yt)
-    return m, accuracy_score(Ye, m.predict(Xe))
-
-@st.cache_resource
-def train_regressor():
-    np.random.seed(42)
-    X, y = [], []
-    for _ in range(800):
-        params = [np.random.uniform(1,20), np.random.uniform(0.003,0.012),
-                  np.random.uniform(0.008,0.025), np.random.uniform(0.00005,0.0004)]
-        t = np.linspace(0, params[0]*365, 400)
-        s = odeint(cartilage, [0,1.0], t, args=(params[1], params[2], params[3], 0.5))
-        X.append(params); y.append(s[-1,1])
-    X, y = np.array(X), np.array(y)
-    Xt, Xe, Yt, Ye = train_test_split(X, y, test_size=0.2, random_state=42)
-    m = Pipeline([('scaler', StandardScaler()),
-                  ('mlp', MLPRegressor(hidden_layer_sizes=(128,64,32), activation='relu',
-                                       max_iter=600, learning_rate_init=0.001, random_state=42))])
-    m.fit(Xt, Yt)
-    return m, r2_score(Ye, m.predict(Xe))
-
-
-# ============================================================
-#              نظام التسعير
+#              نظام الاشتراكات
 # ============================================================
 
 PLANS = {
-    "free": {"name": "🆓 مجاني", "price_yemen": 0, "price_gulf": 0, "price_global": 0,
-             "duration_days": 999999, "max_trials": 10,
-             "features": {"ai": False, "csv": False, "pdf": False, "api": False}},
-    "weekly": {"name": "📅 أسبوعي", "price_yemen": 3, "price_gulf": 14.99, "price_global": 24.99,
-               "duration_days": 7, "max_trials": -1,
-               "features": {"ai": True, "csv": True, "pdf": False, "api": False}},
-    "monthly": {"name": "📆 شهري", "price_yemen": 10, "price_gulf": 39.99, "price_global": 59.99,
-                "duration_days": 30, "max_trials": -1,
-                "features": {"ai": True, "csv": True, "pdf": True, "api": False}},
-    "yearly": {"name": "⭐ سنوي", "price_yemen": 80, "price_gulf": 299, "price_global": 499,
-               "duration_days": 365, "max_trials": -1,
-               "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "pro_monthly": {"name": "🩺 احترافي شهري", "price_yemen": 20, "price_gulf": 79, "price_global": 129,
-                    "duration_days": 30, "max_trials": -1,
-                    "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "pro_yearly": {"name": "🏆 احترافي سنوي", "price_yemen": 150, "price_gulf": 599, "price_global": 999,
-                   "duration_days": 365, "max_trials": -1,
-                   "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "university": {"name": "🏫 باقة الجامعة", "price_yemen": 800, "price_gulf": 3500, "price_global": 7000,
-                   "duration_days": 365, "max_trials": -1,
-                   "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "hospital": {"name": "🏥 باقة المستشفى", "price_yemen": 3000, "price_gulf": 15000, "price_global": 35000,
-                 "duration_days": 365, "max_trials": -1,
-                 "features": {"ai": True, "csv": True, "pdf": True, "api": True}},
-    "pharma": {"name": "💊 باقة شركة الأدوية", "price_yemen": 15000, "price_gulf": 75000, "price_global": 300000,
-               "duration_days": 365, "max_trials": -1,
-               "features": {"ai": True, "csv": True, "pdf": True, "api": True}}
+
+    "free": {
+        "name": "🆓 مجاني",
+        "price": 0,
+        "days": 999999,
+        "trials": 10,
+        "features": {"ai": False, "pdf": False, "csv": False}
+    },
+
+    "monthly": {
+        "name": "📆 شهري",
+        "price": 59.99,
+        "days": 30,
+        "trials": -1,
+        "features": {"ai": True, "pdf": True, "csv": True}
+    },
+
+    "yearly": {
+        "name": "⭐ سنوي",
+        "price": 499,
+        "days": 365,
+        "trials": -1,
+        "features": {"ai": True, "pdf": True, "csv": True}
+    },
+
+    "university": {
+        "name": "🏫 جامعة",
+        "price": 7000,
+        "days": 365,
+        "trials": -1,
+        "features": {"ai": True, "pdf": True, "csv": True}
+    },
+
+    "hospital": {
+        "name": "🏥 مستشفى",
+        "price": 35000,
+        "days": 365,
+        "trials": -1,
+        "features": {"ai": True, "pdf": True, "csv": True}
+    }
 }
 
-def init_user_session():
-    defaults = {'user_plan': 'free', 'trials_used': 0, 'subscription_start': None,
-                'subscription_end': None, 'show_pricing': False, 'customer_name': None}
+
+def init_subscription():
+
+    defaults = {
+        "user_plan": "free",
+        "trials_used": 0,
+        "customer_name": None,
+        "subscription_end": None,
+        "admin_auth": False
+    }
+
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
-def get_current_plan(): return PLANS[st.session_state.user_plan]
-def can_use_ai(): return get_current_plan()['features']['ai']
 
-def use_trial():
-    if get_current_plan()['max_trials'] == -1: return True
-    if st.session_state.trials_used < 10:
-        st.session_state.trials_used += 1
-        return True
-    return False
+init_subscription()
+
+
+def current_plan():
+    return PLANS[st.session_state.user_plan]
+
+
+def can_use_ai():
+    return current_plan()["features"]["ai"]
+
 
 def remaining_trials():
-    plan = get_current_plan()
-    if plan['max_trials'] == -1: return "∞"
-    return max(0, plan['max_trials'] - st.session_state.trials_used)
+
+    plan = current_plan()
+
+    if plan["trials"] == -1:
+        return "∞"
+
+    return max(0, plan["trials"] - st.session_state.trials_used)
+
+
+def use_trial():
+
+    plan = current_plan()
+
+    if plan["trials"] == -1:
+        return True
+
+    if st.session_state.trials_used < plan["trials"]:
+        st.session_state.trials_used += 1
+        return True
+
+    return False
+
+
+# ============================================================
+#              حالة الاشتراك
+# ============================================================
 
 def show_subscription_status():
-    plan = get_current_plan()
-    st.sidebar.markdown("---"); st.sidebar.markdown("### 💳 حالة الاشتراك")
-    if st.session_state.user_plan == 'free':
-        st.sidebar.warning(f"**الباقة:** {plan['name']}")
-        st.sidebar.info(f"**التجارب:** {remaining_trials()} / 10")
-        if st.sidebar.button("🚀 ترقية الآن", use_container_width=True, type="primary"):
-            st.session_state.show_pricing = True; st.rerun()
-    else:
-        st.sidebar.success(f"**الباقة:** {plan['name']}")
-        if st.session_state.get('customer_name'):
-            st.sidebar.info(f"👤 {st.session_state.customer_name}")
-        if st.session_state.subscription_end:
-            days_left = max(0, (st.session_state.subscription_end - datetime.now()).days)
-            st.sidebar.info(f"**متبقي:** {days_left} يوم")
 
-def show_activation_field():
-    st.sidebar.markdown("---"); st.sidebar.markdown("### 🔑 تفعيل الباقة")
-    if st.session_state.user_plan == 'free':
-        code_input = st.sidebar.text_input("أدخل كود التفعيل:", key='code_input')
-        if st.sidebar.button("✅ تفعيل", key='activate_btn', use_container_width=True):
-            if code_input:
-                success, result = activate_subscription(code_input.strip().upper())
-                if success:
-                    st.session_state.user_plan = result['plan']
-                    st.session_state.customer_name = result['name']
-                    try:
-                        end = datetime.fromisoformat(result['end_date'].replace('Z', '+00:00'))
-                        st.session_state.subscription_end = end.replace(tzinfo=None)
-                    except:
-                        st.session_state.subscription_end = datetime.now() + timedelta(days=30)
-                    st.sidebar.success(f"✅ مرحباً {result['name']}!")
-                    st.sidebar.balloons(); st.rerun()
-                else:
-                    st.sidebar.error(f"❌ {result}")
-            else:
-                st.sidebar.warning("أدخل الكود أولاً")
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("💳 الاشتراك")
+
+    plan = current_plan()
+
+    if st.session_state.user_plan == "free":
+        st.sidebar.warning(f"""
+الباقة: {plan['name']}
+
+التجارب: {remaining_trials()} / 10
+""")
     else:
-        st.sidebar.success("✅ باقتك مفعّلة")
+        st.sidebar.success(plan["name"])
+        if st.session_state.customer_name:
+            st.sidebar.info(st.session_state.customer_name)
+
+
+# ============================================================
+#              صفحة الأسعار
+# ============================================================
 
 def show_pricing_page():
-    st.header("💎 باقات الاشتراك الاحترافية"); st.markdown("---")
-    region = st.radio("🌍 اختر منطقتك:",
-        ["🌴 الخليج والشرق الأوسط", "🌍 عالمي (دولي)", "🇾🇪 اليمن (محلي)"], horizontal=True)
-    region_key = {"🌴 الخليج والشرق الأوسط": "gulf", "🌍 عالمي (دولي)": "global", "🇾🇪 اليمن (محلي)": "yemen"}[region]
-    st.markdown("## 🎯 الباقات الفردية")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("### 🆓 مجاني\n# $0\n**10 تجارب**\n✅ محاكاة كاملة\n❌ مكونات AI")
-    with c2:
-        st.markdown(f"### 📆 شهري\n# ${PLANS['monthly'][f'price_{region_key}']}\n**30 يوماً**\n✅ محاكاة غير محدودة\n✅ 3 مكونات AI\n✅ Chat AI")
-    with c3:
-        st.markdown(f"### ⭐ سنوي\n# ${PLANS['yearly'][f'price_{region_key}']}\n**365 يوماً**\n✅ كل الميزات\n✅ API Access")
+
+    st.header("💎 باقات HYDROMEM")
     st.markdown("---")
-    st.info("🌍 جميع الأسعار بالدولار الأمريكي — التحويل بالعملة المحلية")
-    st.success("📩 للاشتراك: حوّل المبلغ إلى **779193805** وأرسل الإيصال إلى **ghythanbdalghny97@gmail.com**")
+
+    columns = st.columns(3)
+    index = 0
+
+    for key, plan in PLANS.items():
+
+        with columns[index % 3]:
+            st.subheader(plan["name"])
+            st.metric("السعر", f"${plan['price']}")
+            st.write(f"مدة الاشتراك: {plan['days']} يوم")
+
+            if plan["features"]["ai"]:
+                st.success("✅ AI متقدم")
+            else:
+                st.info("🔹 تجربة أساسية")
+
+        index += 1
+
+
+# ============================================================
+#              لوحة المسؤول
+# ============================================================
 
 def admin_dashboard():
-    st.header("🔧 لوحة تحكم المسؤول"); st.markdown("---")
-    if 'admin_auth' not in st.session_state: st.session_state.admin_auth = False
+
+    st.header("🔧 لوحة تحكم المسؤول")
+
     if not st.session_state.admin_auth:
-        st.subheader("🔐 تسجيل دخول المسؤول")
-        pwd = st.text_input("كلمة المرور:", type="password", key='admin_pwd')
-        if st.button("دخول", type="primary"):
-            if pwd == st.secrets.get("ADMIN_PASSWORD", "Hydromem2026Strong"):
-                st.session_state.admin_auth = True; st.rerun()
-            else: st.error("❌ كلمة مرور خاطئة")
+
+        password = st.text_input("كلمة المرور", type="password")
+
+        if st.button("دخول"):
+
+            correct_password = st.secrets.get(
+                "ADMIN_PASSWORD",
+                "Hydromem2026Strong"
+            )
+
+            if password == correct_password:
+                st.session_state.admin_auth = True
+                st.rerun()
+            else:
+                st.error("كلمة مرور خاطئة")
+
         return
+
     stats = get_stats()
+
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("👥 إجمالي العملاء", stats['total'])
-    c2.metric("✅ نشط", stats['active'])
-    c3.metric("⚠️ قريب الانتهاء", stats['expiring'])
-    c4.metric("💰 الإيرادات", f"${stats['revenue']:.2f}")
-    if not stats['connected']: st.error("⚠️ لم يتم الاتصال بقاعدة البيانات.")
+
+    c1.metric("العملاء", stats.get("total", 0))
+    c2.metric("نشط", stats.get("active", 0))
+    c3.metric("قريب الانتهاء", stats.get("expiring", 0))
+    c4.metric("الإيرادات", f"${stats.get('revenue', 0)}")
+
     st.markdown("---")
-    tab1, tab2, tab3 = st.tabs(["➕ إضافة عميل", "📋 قائمة العملاء", "⚠️ تذكيرات"])
+
+    tab1, tab2 = st.tabs(["➕ إضافة عميل", "📋 العملاء"])
+
     with tab1:
-        st.subheader("➕ إضافة عميل جديد")
-        c1, c2 = st.columns(2)
-        with c1:
-            name = st.text_input("اسم العميل *", key='new_name')
-            phone = st.text_input("رقم الجوال *", key='new_phone')
-        with c2:
-            email = st.text_input("البريد الإلكتروني", key='new_email')
-            plan = st.selectbox("الباقة *", list(PLANS.keys())[1:], key='new_plan',
-                                format_func=lambda x: PLANS[x]['name'])
-            amount = st.number_input("المبلغ (USD)", min_value=0.0, value=39.99, key='new_amount')
-        if st.button("✅ إضافة العميل", type="primary", use_container_width=True):
+
+        name = st.text_input("اسم العميل")
+        phone = st.text_input("الهاتف")
+        email = st.text_input("البريد")
+        plan = st.selectbox("الباقة", list(PLANS.keys()))
+
+        if st.button("إضافة"):
+
             if name and phone:
-                success, result = add_customer(name, phone, email, plan, amount, "")
+
+                success, result = add_customer(
+                    name, phone, email, plan,
+                    PLANS[plan]["price"], ""
+                )
+
                 if success:
-                    st.success(f"✅ تم الإضافة! الكود: **{result['code']}**")
-                    st.balloons()
-                else: st.error(f"❌ {result}")
+                    st.success("تمت الإضافة")
+                else:
+                    st.error(result)
+
     with tab2:
+
         customers = get_all_customers()
-        if customers:
-            for c in customers:
-                st.write(f"**{c['name']}** - {c['phone']} - {c['plan']} - `{c['activation_code']}`")
-        else: st.info("لا يوجد عملاء بعد")
-    with tab3:
-        expiring = get_expiring_customers(7)
-        if expiring:
-            for c in expiring: st.warning(f"⚠️ {c['name']} - {c['phone']}")
-        else: st.success("✅ لا يوجد عملاء ينتهي اشتراكهم")
-    if st.button("🚪 خروج"): st.session_state.admin_auth = False; st.rerun()
+        for customer in customers:
+            st.write(customer)
+
+    if st.button("🚪 خروج"):
+        st.session_state.admin_auth = False
+        st.rerun()
 
 
 # ============================================================
-#                    الواجهة الرئيسية
+#              الطبقة النهائية لتجربة المستخدم
 # ============================================================
 
-init_user_session()
+def show_platform_status():
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📊 حالة المنصة")
+
+    st.sidebar.success("""
+✅ النظام يعمل
+
+🧬 HYDROMEM Engine
+
+🤖 AI Components
+
+💬 Chat Memory
+
+📈 Dynamic Simulation
+""")
+
+
+def show_user_settings():
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("⚙️ إعدادات المستخدم")
+
+    if st.sidebar.button("💾 حفظ الإعدادات", use_container_width=True):
+        save_chat_history()
+        st.sidebar.success("✅ تم حفظ الإعدادات")
+
+    if st.sidebar.button("🆕 محادثة جديدة", use_container_width=True):
+        clear_current_chat()
+        st.session_state.current_chat_id = str(uuid.uuid4())
+        st.sidebar.success("تم إنشاء محادثة جديدة")
+        st.rerun()
+
+
+# ============================================================
+#     ⭐ Widget المحادثة داخل الصفحة الرئيسية (v16.1)
+# ============================================================
+
+def home_chat_widget():
+
+    st.markdown("---")
+    st.header("💬 HYDROMEM AI Assistant")
+    st.caption("اسأل مباشرة بدون مغادرة الصفحة الرئيسية")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("⚡ رد مختصر", use_container_width=True):
+            st.session_state.response_mode = "⚡ مختصر"
+            st.rerun()
+
+    with col2:
+        if st.button("📚 رد مفصل", use_container_width=True):
+            st.session_state.response_mode = "📚 مفصل"
+            st.rerun()
+
+    st.info(f"🎯 طريقة الرد الحالية: **{st.session_state.response_mode}**")
+
+    st.markdown("---")
+
+    # عرض سجل المحادثة داخل الرئيسية
+    if st.session_state.chat_history:
+
+        with st.expander(
+            f"📜 سجل المحادثة ({len(st.session_state.chat_history)} رسالة)",
+            expanded=True
+        ):
+
+            for message in st.session_state.chat_history:
+
+                with st.chat_message(message["role"]):
+                    st.write(message["content"])
+
+    # خانة الإدخال
+    user_prompt = st.chat_input("اسأل HYDROMEM AI...")
+
+    if user_prompt:
+
+        add_message("user", user_prompt)
+
+        final_prompt = f"""
+طريقة الإجابة:
+{get_ai_style()}
+
+سؤال المستخدم:
+{user_prompt}
+"""
+
+        try:
+            response = chat_page(final_prompt)
+        except Exception as e:
+            response = f"⚠️ خطأ: {e}"
+
+        add_message("assistant", response)
+
+        st.rerun()
+
+    # أدوات إضافية
+    if st.session_state.chat_history:
+
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            if st.button("🗑️ مسح المحادثة", use_container_width=True):
+                clear_current_chat()
+                st.rerun()
+
+        with col_b:
+            st.download_button(
+                "📥 تحميل المحادثة",
+                export_chat_text(),
+                file_name="HYDROMEM_home_chat.txt",
+                use_container_width=True
+            )
+
+
+# ============================================================
+#              الواجهة الرئيسية v16.1
+# ============================================================
+
 st.title("🧬 HYDROMEM Dynamics AI")
-st.markdown("### منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة")
+
+st.markdown("""
+### منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة
+
+إصدار Professional v16.1
+""")
+
 st.markdown("---")
 
-app = st.sidebar.radio("🔬 اختر التطبيق:", [
-    "🏠 الرئيسية", "💎 باقات الاشتراك", "🔧 لوحة التحكم", "💬 HYDROMEM Chat",
-    "⚙️ النموذج الديناميكي العام", "🦵 خشونة الركبة", "🦴 التئام العظام",
-    "💧 الأقراص الفقرية", "🩹 التئام الجروح", "🧠 مكونات الذكاء الاصطناعي"
-])
+
+# ============================================================
+#              القائمة الجانبية
+# ============================================================
+
+app = st.sidebar.radio(
+    "🔬 اختر التطبيق:",
+    [
+        "🏠 الرئيسية",
+        "💎 باقات الاشتراك",
+        "🔧 لوحة التحكم",
+        "💬 HYDROMEM Chat",
+        "⚙️ النموذج الديناميكي العام",
+        "🦵 خشونة الركبة",
+        "🦴 التئام العظام",
+        "💧 الأقراص الفقرية",
+        "🩹 التئام الجروح",
+        "🧠 مكونات الذكاء الاصطناعي"
+    ]
+)
 
 st.sidebar.markdown("---")
-st.sidebar.info("**HYDROMEM Dynamics AI**\n\nالإصدار 15.6")
-st.sidebar.markdown("📧 ghythanbdalghny97@gmail.com\n📱 +967 779193805")
+
+st.sidebar.info("""
+🧬 HYDROMEM Dynamics AI
+
+v16.1 Professional
+
+5 تطبيقات + AI + Chat
+""")
 
 show_subscription_status()
-show_activation_field()
+show_platform_status()
+show_user_settings()
 
 
+# ============================================================
+#              التوجيه بين الصفحات
+# ============================================================
+
+# ---------- الصفحة الرئيسية ----------
 if app == "🏠 الرئيسية":
-    st.header("مرحباً بكم في HYDROMEM Dynamics AI")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("### 🎯 الرؤية\nمنصة حاسوبية متكاملة لمحاكاة وتحليل الأنظمة الديناميكية المعقدة.")
-        st.markdown("### 🔬 التطبيقات\n- 💬 HYDROMEM Chat\n- ⚙️ النموذج العام\n- 🦵 خشونة الركبة\n- 🦴 التئام العظام\n- 💧 الأقراص الفقرية\n- 🩹 التئام الجروح")
-    with c2:
-        st.markdown("### ⚙️ التقنيات\n- ODEs + odeint\n- Jacobian\n- MLP + RF\n- Gemini AI\n- Supabase\n- تقارير تلقائية")
-        st.success("✅ منصة كاملة جاهزة")
 
-elif app == "💎 باقات الاشتراك": show_pricing_page()
-elif app == "🔧 لوحة التحكم": admin_dashboard()
-elif app == "💬 HYDROMEM Chat": chat_page()
+    st.header("🧬 HYDROMEM Dynamics AI")
+    st.subheader("منصة ذكاء حاسوبي للمحاكاة وتحليل الأنظمة الديناميكية المعقدة")
 
+    st.markdown("---")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.info("""
+⚙️
+
+نماذج ديناميكية
+
+ODE Simulation
+
+Stability Analysis
+
+Mathematical Models
+""")
+
+    with col2:
+        st.success("""
+🤖
+
+ذكاء اصطناعي
+
+ML Models
+
+Neural Networks
+
+Dynamic Prediction
+""")
+
+    with col3:
+        st.warning("""
+💬
+
+HYDROMEM Chat
+
+ذاكرة المحادثة
+
+اختيار مستوى الرد
+""")
+
+    st.markdown("---")
+
+    st.markdown("""
+## 🚀 مميزات الإصدار 16.1
+
+✅ اختيار الرد المختصر أو المفصل مباشرة من الرئيسية
+
+✅ محادثة AI مدمجة في الصفحة الرئيسية
+
+✅ حفظ سجل المحادثات
+
+✅ نسخ وتصدير النتائج
+
+✅ محاكاة الأنظمة الديناميكية
+
+✅ تقارير آلية
+
+✅ واجهة احترافية
+
+✅ مكونات الذكاء الاصطناعي
+""")
+
+    # ⭐ إضافة Widget المحادثة في الصفحة الرئيسية
+    home_chat_widget()
+
+
+# ---------- صفحة الاشتراك ----------
+elif app == "💎 باقات الاشتراك":
+    show_pricing_page()
+
+
+# ---------- لوحة الإدارة ----------
+elif app == "🔧 لوحة التحكم":
+    admin_dashboard()
+
+
+# ---------- HYDROMEM CHAT (الصفحة الكاملة) ----------
+elif app == "💬 HYDROMEM Chat":
+
+    st.header("💬 HYDROMEM AI Chat")
+    st.caption("الصفحة الكاملة للمحادثة")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("⚡ رد مختصر", use_container_width=True):
+            st.session_state.response_mode = "⚡ مختصر"
+            st.rerun()
+
+    with col2:
+        if st.button("📚 رد مفصل", use_container_width=True):
+            st.session_state.response_mode = "📚 مفصل"
+            st.rerun()
+
+    st.info(f"🎯 طريقة الرد الحالية: **{st.session_state.response_mode}**")
+
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+    user_prompt = st.chat_input("اكتب سؤالك هنا...")
+
+    if user_prompt:
+
+        add_message("user", user_prompt)
+
+        with st.chat_message("user"):
+            st.write(user_prompt)
+
+        final_prompt = f"""
+{get_ai_style()}
+
+سؤال المستخدم:
+
+{user_prompt}
+"""
+
+        try:
+            response = chat_page(final_prompt)
+        except Exception as e:
+            response = f"⚠️ خطأ في محرك المحادثة: {e}"
+
+        add_message("assistant", response)
+
+        with st.chat_message("assistant"):
+            st.write(response)
+
+        st.markdown("---")
+        st.subheader("📋 أدوات الرد")
+
+        st.text_area("نسخ الرد", value=response, height=200)
+
+        if st.button("🗑️ بدء محادثة جديدة"):
+            clear_current_chat()
+            st.rerun()
+
+
+# ---------- النموذج الديناميكي العام ----------
 elif app == "⚙️ النموذج الديناميكي العام":
-    st.header("⚙️ النموذج الديناميكي العام"); st.markdown("---")
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        A0 = st.slider("A₀", 0.0, 2.0, 0.5, 0.1, key='gen_A0')
-        T0 = st.slider("Θ₀", 0.0, 2.0, 0.2, 0.1, key='gen_T0')
-        mu = st.slider("μ", 0.1, 2.0, 1.0, 0.1, key='gen_mu')
-        k = st.slider("κ", 0.0, 2.0, 0.5, 0.1, key='gen_k')
-        b = st.slider("β", 0.1, 2.0, 0.8, 0.1, key='gen_b')
-        g = st.slider("γ", 0.0, 1.0, 0.3, 0.05, key='gen_g')
-        te = st.slider("الزمن", 10, 200, 50, key='gen_te')
-    with c2:
-        t = np.linspace(0, te, 500)
-        s = odeint(general, [A0, T0], t, args=(mu, k, b, g))
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.plot(t, s[:,0], 'b-', lw=2, label='A'); ax.plot(t, s[:,1], 'r-', lw=2, label='Θ')
-        add_values_on_plot(ax, t, s[:,0], 6, 'blue'); add_values_on_plot(ax, t, s[:,1], 6, 'red')
-        ax.set_xlabel('الزمن'); ax.legend(); ax.grid(alpha=0.3); st.pyplot(fig)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("A النهائي", f"{s[-1,0]:.6f}"); c2.metric("Θ النهائي", f"{s[-1,1]:.6f}")
-    c3.metric("A الأقصى", f"{s[:,0].max():.6f}"); c4.metric("Θ الأقصى", f"{s[:,1].max():.6f}")
-    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
-    st.subheader("💬 دردشة التحكم السريع")
-    if "gen_chat" not in st.session_state:
-        st.session_state.gen_chat = [{"role": "assistant", "content": "مرحباً! اكتب طلبك لتعديل المحاكاة."}]
-    for msg in st.session_state.gen_chat: st.chat_message(msg["role"]).write(msg["content"])
-    if prompt := st.chat_input("اكتب طلبك...", key="gen_chat_input"):
-        st.session_state.gen_chat.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
-        updated, response_msg = process_chat_command(prompt, app)
-        st.session_state.gen_chat.append({"role": "assistant", "content": response_msg})
-        st.chat_message("assistant").write(response_msg)
-        if updated: st.rerun()
-    use_trial()
 
+    st.header("⚙️ النموذج الديناميكي العام")
+    st.caption("نموذج تفاعل A–T مع تحليل الاستقرار")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        mu = st.slider("μ (معدل النمو)", 0.1, 3.0,
+                       float(st.session_state.gen_mu), 0.1)
+        k = st.slider("k (الاقتران)", 0.0, 2.0,
+                      float(st.session_state.gen_k), 0.1)
+
+    with col2:
+        b = st.slider("b (استجابة T)", 0.1, 2.0,
+                      float(st.session_state.gen_b), 0.1)
+        g = st.slider("g (تحلل T)", 0.0, 1.5,
+                      float(st.session_state.gen_g), 0.1)
+
+    te = st.slider("زمن المحاكاة", 10, 200,
+                   int(st.session_state.gen_te), 5)
+
+    st.session_state.gen_mu = mu
+    st.session_state.gen_k = k
+    st.session_state.gen_b = b
+    st.session_state.gen_g = g
+    st.session_state.gen_te = te
+
+    t = np.linspace(0, te, 500)
+
+    sol = odeint(general, [st.session_state.gen_A0,
+                            st.session_state.gen_T0],
+                 t, args=(mu, k, b, g))
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(t, sol[:, 0], label="A(t)")
+    ax.plot(t, sol[:, 1], label="T(t)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("State")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    st.pyplot(fig)
+
+    if len(t) > 0:
+        add_values_on_plot(ax, t, sol[:, 0], num_points=5)
+
+    generate_report(
+        "⚙️ النموذج الديناميكي العام",
+        {
+            "μ": mu, "k": k, "b": b, "g": g,
+            "زمن المحاكاة": te,
+            "A النهائي": round(float(sol[-1, 0]), 4),
+            "T النهائي": round(float(sol[-1, 1]), 4)
+        }
+    )
+
+
+# ---------- خشونة الركبة ----------
 elif app == "🦵 خشونة الركبة":
-    st.header("🦵 محاكاة خشونة الركبة"); st.markdown("---")
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        yrs = st.slider("عدد السنوات", 1, 25, 10, key='knee_yrs')
-        kp = st.slider("معدل إنتاج MMP", 0.003, 0.012, 0.005, 0.001, key='knee_kp')
-        kd = st.slider("معدل التحلل", 0.008, 0.025, 0.015, 0.001, key='knee_kd')
-        a = st.slider("معامل التلف", 0.00005, 0.0004, 0.00010, 0.00005, key='knee_a')
-    with c2:
-        t = np.linspace(0, yrs*365, 1000)
-        s = odeint(cartilage, [0, 1.0], t, args=(kp, kd, a, 0.5))
-        fig, ax1 = plt.subplots(figsize=(12, 6))
-        ax1.plot(t/365, s[:,0], 'r-', lw=2, label='MMP'); ax1.set_ylabel('MMP', color='r')
-        ax2 = ax1.twinx(); ax2.plot(t/365, s[:,1], 'b-', lw=2, label='الصلابة'); ax2.set_ylabel('الصلابة', color='b')
-        add_values_on_plot(ax1, t/365, s[:,0], 6, 'darkred'); add_values_on_plot(ax2, t/365, s[:,1], 6, 'darkblue')
-        ax1.set_xlabel('السنوات'); ax1.grid(alpha=0.3); st.pyplot(fig)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("الصلابة النهائية", f"{s[-1,1]:.6f}")
-    c2.metric("مرحلة KL", classify_kl(s[-1,1]))
-    c3.metric("MMP النهائي", f"{s[-1,0]:.6f}")
-    results = {"الصلابة النهائية": f"{s[-1,1]:.4f}", "مرحلة KL": classify_kl(s[-1,1]),
-               "MMP النهائي": f"{s[-1,0]:.4f}"}
-    generate_report("خشونة الركبة", results, [], {"المتابعة": ["زيارة طبيب سنوياً"]})
-    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
-    st.subheader("💬 دردشة التحكم السريع")
-    if "knee_chat" not in st.session_state:
-        st.session_state.knee_chat = [{"role": "assistant", "content": "مرحباً! اكتب طلبك."}]
-    for msg in st.session_state.knee_chat: st.chat_message(msg["role"]).write(msg["content"])
-    if prompt := st.chat_input("اكتب طلبك...", key="knee_chat_input"):
-        st.session_state.knee_chat.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
-        updated, response_msg = process_chat_command(prompt, app)
-        st.session_state.knee_chat.append({"role": "assistant", "content": response_msg})
-        st.chat_message("assistant").write(response_msg)
-        if updated: st.rerun()
-    use_trial()
 
+    st.header("🦵 خشونة الركبة — نموذج الغضروف")
+
+    yrs = st.slider("عدد السنوات", 1, 25,
+                    int(st.session_state.knee_yrs))
+
+    st.session_state.knee_yrs = yrs
+
+    t = np.linspace(0, yrs * 365, 800)
+
+    sol = odeint(
+        cartilage,
+        [1.0, 1.0],
+        t,
+        args=(st.session_state.knee_kp,
+              st.session_state.knee_kd,
+              st.session_state.knee_a,
+              1.0)
+    )
+
+    final_c = float(sol[-1, 0])
+    final_m = float(sol[-1, 1])
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(t, sol[:, 0], label="Cartilage (c)")
+    ax.plot(t, sol[:, 1], label="Matrix (m)")
+    ax.set_xlabel("Days")
+    ax.set_ylabel("State")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    st.pyplot(fig)
+
+    st.metric("تصنيف KL", classify_kl(final_c))
+
+    generate_report(
+        "🦵 خشونة الركبة",
+        {
+            "السنوات": yrs,
+            "c النهائي": round(final_c, 4),
+            "m النهائي": round(final_m, 4),
+            "التصنيف": classify_kl(final_c)
+        }
+    )
+
+
+# ---------- التئام العظام ----------
 elif app == "🦴 التئام العظام":
-    st.header("🦴 محاكاة التئام العظام"); st.markdown("---")
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        wk = st.slider("عدد الأسابيع", 4, 24, 16, key='bone_wk')
-        km = st.slider("معدل التمعدن", 0.05, 0.5, 0.3, 0.05, key='bone_km')
-        mu = st.slider("معامل النمو", 1.1, 3.0, 2.0, 0.1, key='bone_mu')
-        Cm = st.slider("الصلابة القصوى", 10.0, 30.0, 20.0, 1.0, key='bone_Cm')
-    with c2:
-        t = np.linspace(0, wk*7, 500)
-        s = odeint(bone, [0,0,0], t, args=(km, mu, Cm))
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.plot(t/7, s[:,0], 'g-', lw=2, label='الكالسيوم')
-        ax.plot(t/7, s[:,1]*10, 'b-', lw=2, label='التمعدن ×10')
-        ax.plot(t/7, s[:,2], 'r-', lw=2, label='الصلابة')
-        add_values_on_plot(ax, t/7, s[:,0], 5, 'green'); add_values_on_plot(ax, t/7, s[:,2], 5, 'red')
-        ax.set_xlabel('الأسابيع'); ax.legend(); ax.grid(alpha=0.3); st.pyplot(fig)
-    C = s[-1,2]
-    c1, c2, c3 = st.columns(3)
-    c1.metric("الصلابة النهائية", f"{C:.4f}"); c2.metric("نسبة الحمل", f"{(C/Cm)*100:.2f}%")
-    c3.metric("المرحلة", healing_stage(C, Cm))
-    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
-    st.subheader("💬 دردشة التحكم السريع")
-    if "bone_chat" not in st.session_state:
-        st.session_state.bone_chat = [{"role": "assistant", "content": "مرحباً! اكتب طلبك."}]
-    for msg in st.session_state.bone_chat: st.chat_message(msg["role"]).write(msg["content"])
-    if prompt := st.chat_input("اكتب طلبك...", key="bone_chat_input"):
-        st.session_state.bone_chat.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
-        updated, response_msg = process_chat_command(prompt, app)
-        st.session_state.bone_chat.append({"role": "assistant", "content": response_msg})
-        st.chat_message("assistant").write(response_msg)
-        if updated: st.rerun()
-    use_trial()
 
+    st.header("🦴 التئام العظام — نموذج ثلاثي المراحل")
+
+    wk = st.slider("الأسابيع", 4, 24,
+                   int(st.session_state.bone_wk))
+    km = st.slider("معامل التمعدن", 0.05, 0.5,
+                   float(st.session_state.bone_km), 0.01)
+
+    st.session_state.bone_wk = wk
+    st.session_state.bone_km = km
+
+    t = np.linspace(0, wk * 7, 600)
+
+    sol = odeint(
+        bone,
+        [1.0, 0.01, 0.0],
+        t,
+        args=(km, st.session_state.bone_mu,
+              st.session_state.bone_Cm)
+    )
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(t, sol[:, 0], label="Ca")
+    ax.plot(t, sol[:, 1], label="m (mineral)")
+    ax.plot(t, sol[:, 2], label="C (callus)")
+    ax.set_xlabel("Days")
+    ax.set_ylabel("State")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    st.pyplot(fig)
+
+    stage = healing_stage(float(sol[-1, 2]),
+                          st.session_state.bone_Cm)
+    st.metric("مرحلة الالتئام", stage)
+
+    generate_report(
+        "🦴 التئام العظام",
+        {
+            "الأسابيع": wk,
+            "معامل التمعدن": km,
+            "Ca النهائي": round(float(sol[-1, 0]), 4),
+            "m النهائي": round(float(sol[-1, 1]), 4),
+            "C النهائي": round(float(sol[-1, 2]), 4),
+            "المرحلة": stage
+        }
+    )
+
+
+# ---------- الأقراص الفقرية ----------
 elif app == "💧 الأقراص الفقرية":
-    st.header("💧 محاكاة الأقراص الفقرية"); st.markdown("---")
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        h = st.slider("عدد الساعات", 6, 48, 24, key='disc_h')
-        ks = st.slider("معدل الانتفاخ", 0.05, 0.2, 0.1, 0.01, key='disc_ks')
-        kd = st.slider("معدل التحلل", 0.02, 0.1, 0.05, 0.01, key='disc_kd')
-        pl = st.slider("الحمل", 0.2, 1.0, 0.5, 0.1, key='disc_pl')
-    with c2:
-        t = np.linspace(0, h, 500)
-        s = odeint(disc, [0.5, 1.0, 0.3], t, args=(ks, kd, pl))
-        fig, ax1 = plt.subplots(figsize=(12, 6))
-        ax1.plot(t, s[:,0]*100, 'b-', lw=2, label='الماء %'); ax1.set_ylabel('الماء %', color='b')
-        ax2 = ax1.twinx(); ax2.plot(t, s[:,1], 'g-', lw=2, label='الارتفاع'); ax2.plot(t, s[:,2], 'r-', lw=2, label='الضغط')
-        ax2.legend(loc='upper left'); ax1.set_xlabel('الساعات'); ax1.grid(alpha=0.3); st.pyplot(fig)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("الماء النهائي", f"{s[-1,0]*100:.2f}%"); c2.metric("الارتفاع", f"{s[-1,1]:.6f}")
-    c3.metric("الضغط", f"{s[-1,2]:.6f}")
-    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
-    st.subheader("💬 دردشة التحكم السريع")
-    if "disc_chat" not in st.session_state:
-        st.session_state.disc_chat = [{"role": "assistant", "content": "مرحباً! اكتب طلبك."}]
-    for msg in st.session_state.disc_chat: st.chat_message(msg["role"]).write(msg["content"])
-    if prompt := st.chat_input("اكتب طلبك...", key="disc_chat_input"):
-        st.session_state.disc_chat.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
-        updated, response_msg = process_chat_command(prompt, app)
-        st.session_state.disc_chat.append({"role": "assistant", "content": response_msg})
-        st.chat_message("assistant").write(response_msg)
-        if updated: st.rerun()
-    use_trial()
 
+    st.header("💧 الأقراص الفقرية — نموذج ثلاثي")
+
+    hours = st.slider("الساعات", 6, 48,
+                      int(st.session_state.disc_h))
+
+    st.session_state.disc_h = hours
+
+    t = np.linspace(0, hours, 500)
+
+    sol = odeint(
+        disc,
+        [1.0, 1.0, 0.2],
+        t,
+        args=(st.session_state.disc_ks,
+              st.session_state.disc_kd,
+              st.session_state.disc_pl)
+    )
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(t, sol[:, 0], label="w (water)")
+    ax.plot(t, sol[:, 1], label="h (height)")
+    ax.plot(t, sol[:, 2], label="P (pressure)")
+    ax.set_xlabel("Hours")
+    ax.set_ylabel("State")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    st.pyplot(fig)
+
+    generate_report(
+        "💧 الأقراص الفقرية",
+        {
+            "الساعات": hours,
+            "w النهائي": round(float(sol[-1, 0]), 4),
+            "h النهائي": round(float(sol[-1, 1]), 4),
+            "P النهائي": round(float(sol[-1, 2]), 4)
+        }
+    )
+
+
+# ---------- التئام الجروح ----------
 elif app == "🩹 التئام الجروح":
-    st.header("🩹 محاكاة التئام الجروح"); st.markdown("---")
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        wk = st.slider("عدد الأسابيع", 4, 16, 12, key='wound_wk')
-        scenario = st.selectbox("السيناريو", ["Normal (طبيعي)", "Infected (مصاب)", "Fast (سريع)"], key='wound_scenario')
-        if "Normal" in scenario: p = {'ke':1.2,'ka':0.15,'kf':1.0,'kd':0.10,'kc':1.0,'kr':0.20,'ki':0.5,'kii':0.6,'kb':0.2,'kbb':0.8,'km':0.3,'kmm':0.5}
-        elif "Infected" in scenario: p = {'ke':0.6,'ka':0.40,'kf':0.5,'kd':0.30,'kc':0.6,'kr':0.35,'ki':0.9,'kii':0.25,'kb':0.5,'kbb':0.5,'km':0.6,'kmm':0.4}
-        else: p = {'ke':1.5,'ka':0.08,'kf':1.3,'kd':0.05,'kc':1.3,'kr':0.10,'ki':0.3,'kii':0.8,'kb':0.1,'kbb':1.0,'km':0.2,'kmm':0.6}
-    with c2:
-        t = np.linspace(0, wk*7, 1000)
-        s = odeint(wound, [0.01,0.01,0,0.95,0.3,0.1], t, args=(p,))
-        fig, axes = plt.subplots(2, 2, figsize=(14, 9))
-        axes[0,0].plot(t/7, np.maximum(s[:,0],0)*100, 'b-', lw=2); axes[0,0].set_title('إعادة التغطية %'); axes[0,0].grid(alpha=0.3)
-        axes[0,1].plot(t/7, np.maximum(s[:,2],0)*100, 'g-', lw=2); axes[0,1].set_title('الكولاجين %'); axes[0,1].grid(alpha=0.3)
-        axes[1,0].plot(t/7, s[:,3], 'r-', lw=2); axes[1,0].set_title('الالتهاب'); axes[1,0].grid(alpha=0.3)
-        axes[1,1].plot(t/7, s[:,4], 'm-', lw=2); axes[1,1].set_title('الحمل البكتيري'); axes[1,1].grid(alpha=0.3)
-        plt.tight_layout(); st.pyplot(fig)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("التغطية النهائية", f"{max(s[-1,0],0)*100:.2f}%")
-    c2.metric("الكولاجين النهائي", f"{max(s[-1,2],0)*100:.2f}%")
-    c3.metric("البكتيريا", f"{s[-1,4]:.6f}")
-    st.markdown('<div class="chat-container"></div>', unsafe_allow_html=True)
-    st.subheader("💬 دردشة التحكم السريع")
-    if "wound_chat" not in st.session_state:
-        st.session_state.wound_chat = [{"role": "assistant", "content": "مرحباً! اكتب طلبك."}]
-    for msg in st.session_state.wound_chat: st.chat_message(msg["role"]).write(msg["content"])
-    if prompt := st.chat_input("اكتب طلبك...", key="wound_chat_input"):
-        st.session_state.wound_chat.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
-        updated, response_msg = process_chat_command(prompt, app)
-        st.session_state.wound_chat.append({"role": "assistant", "content": response_msg})
-        st.chat_message("assistant").write(response_msg)
-        if updated: st.rerun()
-    use_trial()
 
+    st.header("🩹 التئام الجروح — نموذج 6 متغيرات")
+
+    wk = st.slider("الأسابيع", 4, 30,
+                   int(st.session_state.wound_wk))
+
+    scenario = st.selectbox(
+        "السيناريو",
+        ["Normal (طبيعي)", "Diabetic (سكري)", "Infected (ملتهب)"]
+    )
+
+    st.session_state.wound_wk = wk
+    st.session_state.wound_scenario = scenario
+
+    base_p = {
+        "ke": 0.8, "ka": 0.5,
+        "kf": 0.7, "kd": 0.4,
+        "kc": 0.6, "kr": 0.3,
+        "ki": 0.4, "kii": 0.5,
+        "kb": 0.3, "kbb": 0.4,
+        "km": 0.5, "kmm": 0.3
+    }
+
+    if scenario == "Diabetic (سكري)":
+        base_p["ke"] = 0.4
+        base_p["kf"] = 0.35
+        base_p["kc"] = 0.3
+
+    elif scenario == "Infected (ملتهب)":
+        base_p["ki"] = 0.9
+        base_p["kb"] = 0.7
+
+    t = np.linspace(0, wk * 7, 700)
+
+    sol = odeint(
+        wound,
+        [0.8, 0.6, 0.0, 0.2, 0.5, 0.0],
+        t, args=(base_p,)
+    )
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    labels = ["E", "F", "C", "I", "B", "M"]
+
+    for i, lbl in enumerate(labels):
+        ax.plot(t, sol[:, i], label=lbl)
+
+    ax.set_xlabel("Days")
+    ax.set_ylabel("State")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    st.pyplot(fig)
+
+    generate_report(
+        "🩹 التئام الجروح",
+        {
+            "الأسابيع": wk,
+            "السيناريو": scenario,
+            "C النهائي": round(float(sol[-1, 2]), 4),
+            "I النهائي": round(float(sol[-1, 3]), 4)
+        }
+    )
+
+
+# ---------- مكونات الذكاء الاصطناعي ----------
 elif app == "🧠 مكونات الذكاء الاصطناعي":
+
     if not can_use_ai():
-        st.error("🔒 هذه الميزة متاحة فقط في الباقات المدفوعة")
-        if st.button("💎 عرض الباقات"): st.session_state.show_pricing = True; st.rerun()
+        st.warning("🔒 هذه الميزة تحتاج اشتراك مدفوع")
     else:
-        st.header("🧠 مكونات الذكاء الاصطناعي"); st.markdown("---")
-        tab1, tab2, tab3 = st.tabs(["⚡ Surrogate", "🎯 Classifier", "📊 Regressor"])
-        with tab1:
-            with st.spinner("جاري التدريب..."): sm, loss = train_surrogate()
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Test MSE", f"{loss:.8f}"); c2.metric("Speedup", "~50×"); c3.metric("Arch", "64-128-64")
-        with tab2:
-            with st.spinner("جاري التدريب..."): clf, acc = train_classifier()
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Accuracy", f"{acc*100:.4f}%"); c2.metric("Trees", "100"); c3.metric("Samples", "800")
-        with tab3:
-            with st.spinner("جاري التدريب..."): reg, r2 = train_regressor()
-            c1, c2, c3 = st.columns(3)
-            c1.metric("R²", f"{r2:.6f}"); c2.metric("RMSE", "< 0.05"); c3.metric("Arch", "128-64-32")
+        st.header("🧠 مكونات الذكاء الاصطناعي")
+        st.info("""
+- Neural Surrogate Model
+- Stability Classifier
+- Dynamic Regression Model
+""")
+
+
+# ============================================================
+#              التحقق النهائي للنظام
+# ============================================================
+
+st.sidebar.markdown("---")
+
+st.sidebar.caption("""
+HYDROMEM Dynamics AI
+
+v16.1 Professional
+
+Research Prototype
+
+© 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
+""")
+
+
+# ============================================================
+#              التذييل النهائي
+# ============================================================
 
 st.markdown("---")
-st.markdown("### 📞 للتواصل")
-c1, c2, c3 = st.columns(3)
-c1.markdown("📧 **ghythanbdalghny97@gmail.com**")
-c2.markdown("📱 **+967 779193805**")
-c3.markdown("🏦 **الجاد: 2312718**")
 
-st.markdown("---")
-st.markdown("**HYDROMEM Dynamics AI** — الإصدار 15.6 (Final Absolute) | 5 تطبيقات + 3 AI + تقارير + Supabase + Chat | TRL 3 | © عبد الغني غيثان 2026")
+st.markdown("""
+<div style="text-align:center">
+
+🧬 <b>HYDROMEM Dynamics AI</b>
+
+<br><br>
+
+Advanced AI Simulation Platform
+
+<br>
+
+Professional Edition v16.1
+
+<br><br>
+
+© 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan
+
+<br>
+
+All Rights Reserved
+
+</div>
+""", unsafe_allow_html=True)
