@@ -3,6 +3,12 @@ import streamlit as st
 from datetime import datetime, timedelta
 import auth_db
 
+try:
+    import extra_streamlit_components as stx
+    COOKIES_AVAILABLE = True
+except ImportError:
+    COOKIES_AVAILABLE = False
+
 st.set_page_config(page_title="HYDROMEM Dynamics AI", page_icon="🧬", layout="wide")
 
 PLANS = {
@@ -16,23 +22,66 @@ PLANS = {
 
 ACCOUNT_TYPES = {"individual": "👤 فردي", "researcher": "🔬 باحث", "laboratory": "🧪 مختبر", "university": "🎓 جامعة", "hospital": "🏥 مستشفى", "enterprise": "🏢 شركة"}
 
+if COOKIES_AVAILABLE:
+    cookie_manager = stx.CookieManager(key="hydromem_cookies")
+else:
+    cookie_manager = None
+
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "user" not in st.session_state: st.session_state.user = None
 if "admin_verified" not in st.session_state: st.session_state.admin_verified = False
+if "cookie_checked" not in st.session_state: st.session_state.cookie_checked = False
 
 # ============================================================
-# نظام الدخول الدائم (عبر حفظ البريد في الرابط)
+# استعادة الجلسة (عن طريق الكوكيز أولاً، ثم الرابط)
 # ============================================================
-# 1. إذا كان المستخدم مسجل دخول بالفعل في الجلسة الحالية، لا نفعل شيئاً.
-# 2. إذا لم يكن مسجل دخول، نتحقق من وجود البريد في الرابط (URL).
 if not st.session_state.logged_in:
-    if "user_email" in st.query_params:
-        email = st.query_params["user_email"]
-        fresh_user = auth_db.get_user_by_email(email)
+    saved_email = None
+    
+    # 1. المحاولة الأولى: قراءة الكوكيز
+    if COOKIES_AVAILABLE and cookie_manager is not None and not st.session_state.cookie_checked:
+        try:
+            all_c = cookie_manager.get_all()
+            if all_c is not None:
+                st.session_state.cookie_checked = True
+                saved_email = all_c.get("hydromem_user")
+        except:
+            pass
+            
+    # 2. المحاولة الثانية: قراءة الرابط (في حال حظر المتصفح للكوكيز)
+    if not saved_email and "user_email" in st.query_params:
+        saved_email = st.query_params["user_email"]
+
+    # إذا وجدنا بريداً محفوظاً، نسجل الدخول تلقائياً
+    if saved_email:
+        fresh_user = auth_db.get_user_by_email(saved_email)
         if fresh_user:
             st.session_state.logged_in = True
             st.session_state.user = fresh_user
+            st.query_params["user_email"] = saved_email # تحديث الرابط
             st.rerun()
+
+# ============================================================
+# دوال مساعدة
+# ============================================================
+def save_session(user_email):
+    # حفظ في الكوكيز
+    if COOKIES_AVAILABLE and cookie_manager:
+        try:
+            cookie_manager.set("hydromem_user", user_email, expires_at=datetime.now() + timedelta(days=30))
+        except: pass
+    # حفظ في الرابط
+    st.query_params["user_email"] = user_email
+
+def delete_session():
+    # مسح الكوكيز
+    if COOKIES_AVAILABLE and cookie_manager:
+        try:
+            cookie_manager.delete("hydromem_user")
+        except: pass
+    # مسح الرابط
+    if "user_email" in st.query_params:
+        del st.query_params["user_email"]
 
 # ============================================================
 # صفحة الدخول والتسجيل
@@ -50,8 +99,7 @@ def render_auth():
                 if user:
                     st.session_state.logged_in = True
                     st.session_state.user = user
-                    # 🌟 حفظ البريد في الرابط ليتذكرك المتصفح دائماً
-                    st.query_params["user_email"] = user["email"]
+                    save_session(user["email"]) # حفظ الجلسة
                     st.rerun()
                 else: st.error("بيانات خاطئة")
                     
@@ -164,12 +212,10 @@ def main():
         st.title("🧬 HYDROMEM")
         st.info(f"الباقة: {plan_info['name_ar']}")
         
-        # تسجيل الخروج (يمسح الرابط)
         if st.button("🚪 تسجيل الخروج", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.user = None
-            if "user_email" in st.query_params:
-                del st.query_params["user_email"]
+            delete_session()
             st.rerun()
             
         menu = ["🏠 الرئيسية", "💬 HYDROMEM Chat", "🔬 المحاكاة", "💳 ترقية الاشتراك"]
