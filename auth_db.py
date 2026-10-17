@@ -58,6 +58,18 @@ def login_user_db(email, password):
     except Exception:
         return None
 
+def get_user_by_email(email):
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        res = client.table("users").select("*").eq("email", email.lower()).execute()
+        if res.data:
+            return res.data[0]
+        return None
+    except Exception:
+        return None
+
 def update_user_plan(email, new_plan):
     client = _get_client()
     if not client:
@@ -77,7 +89,8 @@ def submit_payment_request(email, plan, amount, receipt_ref):
             "user_email": email.lower(),
             "plan": plan,
             "amount": amount,
-            "receipt_ref": receipt_ref
+            "receipt_ref": receipt_ref,
+            "status": "pending"  # <--- تمت إضافة هذا السطر هنا
         }
         client.table("payments").insert(data).execute()
         return True, "تم إرسال طلب الدفع. بانتظار تأكيد الإدارة."
