@@ -1,6 +1,7 @@
 import hashlib
 import streamlit as st
 from datetime import datetime, timedelta
+import uuid
 
 def _get_client():
     try:
@@ -46,6 +47,29 @@ def get_user_by_email(email):
         return res.data[0] if res.data else None
     except Exception: return None
 
+# ============================================================
+# نظام المفتاح السري (للدخول التلقائي)
+# ============================================================
+def generate_remember_token(email):
+    client = _get_client()
+    if not client: return None
+    try:
+        token = str(uuid.uuid4())
+        client.table("users").update({"remember_token": token}).eq("email", email.lower()).execute()
+        return token
+    except Exception: return None
+
+def login_with_token(token):
+    client = _get_client()
+    if not client: return None
+    try:
+        res = client.table("users").select("*").eq("remember_token", token).execute()
+        return res.data[0] if res.data else None
+    except Exception: return None
+
+# ============================================================
+# إدارة الفريق والمدفوعات
+# ============================================================
 def update_user_plan(email, new_plan, expiry_date=None):
     client = _get_client()
     if not client: return False
@@ -56,31 +80,18 @@ def update_user_plan(email, new_plan, expiry_date=None):
         return True
     except Exception: return False
 
-def increment_simulation(email):
-    client = _get_client()
-    if not client: return
-    try:
-        user = get_user_by_email(email)
-        current = user.get("simulations_used") or 0
-        client.table("users").update({"simulations_used": current + 1}).eq("email", email.lower()).execute()
-    except Exception: pass
-
 def add_team_member(owner_email, name, email, password, role, max_users):
     client = _get_client()
     if not client: return False, "فشل الاتصال."
     try:
         owner = get_user_by_email(owner_email)
         team_id = owner.get("team_id") or owner["id"]
-        
         if not owner.get("team_id"):
             client.table("users").update({"team_id": team_id}).eq("email", owner_email.lower()).execute()
-            
         members = client.table("users").select("id").eq("team_id", team_id).execute()
         if len(members.data) >= max_users:
             return False, f"وصلت للحد الأقصى ({max_users} مستخدمين)."
-            
         if get_user_by_email(email): return False, "البريد مسجل مسبقاً."
-            
         data = {
             "email": email.lower(), "password_hash": hash_password(password), "name": name,
             "account_type": owner.get("account_type"), "organization": owner.get("organization"),
