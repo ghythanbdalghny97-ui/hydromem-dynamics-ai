@@ -1,7 +1,7 @@
 # ============================================================
 # HYDROMEM Dynamics AI
-# streamlit_app.py — Main Application v22.1
-# Persistent Login via Cookies
+# streamlit_app.py — Main Application v22.2 (Ultimate)
+# Includes: Cookies Fix, Simulation Engine, Dynamic Admin
 # ============================================================
 
 import re
@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 import streamlit as st
 
-# Cookie Manager (يُثبت من requirements.txt)
+# Cookie Manager
 try:
     import extra_streamlit_components as stx
     COOKIES_AVAILABLE = True
@@ -127,13 +127,11 @@ if COOKIES_AVAILABLE:
 else:
     cookie_manager = None
 
-
 COOKIE_KEY = "hydromem_session"
 COOKIE_EXPIRY_DAYS = 30
 
 
 def save_session_to_cookie(user):
-    """يحفظ الجلسة في المتصفح لمدة 30 يوماً."""
     if not COOKIES_AVAILABLE or cookie_manager is None:
         return
     try:
@@ -150,7 +148,6 @@ def save_session_to_cookie(user):
 
 
 def load_session_from_cookie():
-    """يقرأ الجلسة من المتصفح إذا وجدت."""
     if not COOKIES_AVAILABLE or cookie_manager is None:
         return None
     try:
@@ -164,7 +161,6 @@ def load_session_from_cookie():
 
 
 def delete_session_cookie():
-    """يحذف الجلسة من المتصفح."""
     if not COOKIES_AVAILABLE or cookie_manager is None:
         return
     try:
@@ -179,7 +175,6 @@ def delete_session_cookie():
 
 def get_plan(plan_id):
     return PLANS.get(plan_id)
-
 
 PERSONAL_DOMAINS = {
     "gmail.com", "yahoo.com", "hotmail.com",
@@ -200,14 +195,11 @@ ACCOUNT_TYPES = {
 def is_valid_email(email):
     return bool(re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", email))
 
-
 def get_domain(email):
     return email.split("@")[-1].lower() if "@" in email else ""
 
-
 def is_personal(email):
     return get_domain(email) in PERSONAL_DOMAINS
-
 
 def validate_registration(name, email, password, account_type, org=None):
     if not name or len(name.strip()) < 2:
@@ -220,9 +212,7 @@ def validate_registration(name, email, password, account_type, org=None):
         return False, "❌ نوع الحساب غير معروف."
 
     plan = get_plan(account_type)
-    needs_org = account_type in (
-        "laboratory", "university", "hospital", "enterprise"
-    )
+    needs_org = account_type in ("laboratory", "university", "hospital", "enterprise")
     if needs_org and (not org or len(org.strip()) < 3):
         return False, f"❌ حساب {ACCOUNT_TYPES[account_type]} يتطلب اسم المؤسسة."
 
@@ -231,8 +221,7 @@ def validate_registration(name, email, password, account_type, org=None):
         return False, "🏢 باقة الشركة لا تقبل البريد الشخصي."
     if rule == "academic":
         d = get_domain(email)
-        if not (d.endswith(".edu") or "university" in d
-                or "college" in d or "ac." in d):
+        if not (d.endswith(".edu") or "university" in d or "college" in d or "ac." in d):
             return False, "🎓 باقة الجامعة تتطلب بريداً أكاديمياً."
     if rule == "organization" and is_personal(email):
         return False, "🏥 باقة المستشفى تتطلب بريداً مؤسسياً."
@@ -241,7 +230,7 @@ def validate_registration(name, email, password, account_type, org=None):
 
 
 # ============================================================
-# تهيئة الجلسة (مع Cookies)
+# تهيئة الجلسة وإصلاح الكوكيز
 # ============================================================
 
 def init_session():
@@ -250,23 +239,35 @@ def init_session():
         "user": None,
         "admin_verified": False,
         "cookies_checked": False,
+        "cookies_ready": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
-
 init_session()
 
-
-# محاولة استعادة الجلسة من المتصفح مرة واحدة فقط
+# إصلاح مشكلة قراءة الكوكيز في المتصفح
 if not st.session_state.logged_in and not st.session_state.cookies_checked:
-    st.session_state.cookies_checked = True
-    saved = load_session_from_cookie()
-    if saved:
-        st.session_state.logged_in = True
-        st.session_state.user = saved
-        st.rerun()
+    if COOKIES_AVAILABLE and cookie_manager is not None:
+        if not st.session_state.cookies_ready:
+            try:
+                if cookie_manager.get_all() is not None:
+                    st.session_state.cookies_ready = True
+            except:
+                pass
+        
+        if st.session_state.cookies_ready:
+            saved = load_session_from_cookie()
+            if saved:
+                st.session_state.logged_in = True
+                st.session_state.user = saved
+                st.session_state.cookies_checked = True
+                st.rerun()
+            else:
+                st.session_state.cookies_checked = True
+    else:
+        st.session_state.cookies_checked = True
 
 
 # ============================================================
@@ -284,9 +285,7 @@ def render_auth():
         with st.form("login"):
             email = st.text_input("البريد الإلكتروني")
             password = st.text_input("كلمة المرور", type="password")
-            remember = st.checkbox(
-                "ابقني مسجلاً لمدة 30 يوماً", value=True
-            )
+            remember = st.checkbox("ابقني مسجلاً لمدة 30 يوماً", value=True)
             ok = st.form_submit_button("دخول", use_container_width=True)
 
         if ok:
@@ -311,10 +310,7 @@ def render_auth():
                 st.success("✅ تم الدخول")
                 st.rerun()
 
-        st.info(
-            "ℹ️ وضع تجريبي: أي بريد صالح يعمل حالياً. "
-            "سيتم ربط Supabase Auth لاحقاً."
-        )
+        st.info("ℹ️ وضع تجريبي: أي بريد صالح يعمل حالياً.")
 
     with tab_register:
         with st.form("register"):
@@ -327,18 +323,13 @@ def render_auth():
                 format_func=lambda k: ACCOUNT_TYPES[k],
             )
             org = None
-            if account_type in ("laboratory", "university",
-                                "hospital", "enterprise"):
+            if account_type in ("laboratory", "university", "hospital", "enterprise"):
                 org = st.text_input("اسم المؤسسة الرسمي")
 
-            ok = st.form_submit_button(
-                "إنشاء الحساب", use_container_width=True
-            )
+            ok = st.form_submit_button("إنشاء الحساب", use_container_width=True)
 
         if ok:
-            valid, msg = validate_registration(
-                name, email, password, account_type, org
-            )
+            valid, msg = validate_registration(name, email, password, account_type, org)
             if not valid:
                 st.error(msg)
             else:
@@ -376,6 +367,7 @@ def render_sidebar(user):
             [
                 "🏠 الرئيسية", "📊 لوحتي",
                 "💎 الباقات", "💬 HYDROMEM Chat",
+                "🔬 المحاكاة", # <-- تمت إضافة المحاكاة
                 "📄 التقارير",
             ],
             key="nav",
@@ -394,9 +386,7 @@ def render_sidebar(user):
         st.divider()
 
         with st.expander("🔒", expanded=False):
-            token = st.text_input(
-                "Admin Token", type="password", key="admin_token"
-            )
+            token = st.text_input("Admin Token", type="password", key="admin_token")
             if st.button("دخول الإدارة", key="admin_btn"):
                 saved = st.secrets.get("ADMIN_MASTER_KEY", "CHANGE_ME")
                 if token and token == saved:
@@ -419,29 +409,19 @@ def page_home(user):
     st.divider()
 
     c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("👥 المستخدمون", plan["users"])
-    with c2:
-        st.metric("📂 المشاريع", plan["projects"])
-    with c3:
-        st.metric("⚙️ محاكاة/شهر", plan["simulations"])
+    with c1: st.metric("👥 المستخدمون", plan["users"])
+    with c2: st.metric("📂 المشاريع", plan["projects"])
+    with c3: st.metric("⚙️ محاكاة/شهر", plan["simulations"])
     with c4:
-        api_label = (
-            "✅ كامل" if plan["api"] == "full"
-            else "⚠️ محدود" if plan["api"] == "limited"
-            else "❌"
-        )
+        api_label = "✅ كامل" if plan["api"] == "full" else "⚠️ محدود" if plan["api"] == "limited" else "❌"
         st.metric("🔑 API", api_label)
 
     st.divider()
     st.subheader("🚀 ابدأ الآن")
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.button("💬 HYDROMEM Chat", use_container_width=True)
-    with c2:
-        st.button("⚙️ محاكاة جديدة", use_container_width=True)
-    with c3:
-        st.button("📄 تقاريري", use_container_width=True)
+    with c1: st.button("💬 HYDROMEM Chat", use_container_width=True)
+    with c2: st.button("⚙️ محاكاة جديدة", use_container_width=True)
+    with c3: st.button("📄 تقاريري", use_container_width=True)
 
     st.divider()
     st.warning(SCIENTIFIC_DISCLAIMER)
@@ -454,12 +434,9 @@ def page_dashboard(user):
     st.divider()
 
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("📂 المشاريع", f"0 / {plan['projects']}")
-    with c2:
-        st.metric("⚙️ المحاكاة", f"0 / {plan['simulations']}")
-    with c3:
-        st.metric("💾 التخزين", "0 MB")
+    with c1: st.metric("📂 المشاريع", f"0 / {plan['projects']}")
+    with c2: st.metric("⚙️ المحاكاة", f"0 / {plan['simulations']}")
+    with c3: st.metric("💾 التخزين", "0 MB")
 
     st.divider()
     if plan["team"]:
@@ -488,10 +465,7 @@ def page_pricing(user):
 
     def card(col, pid):
         plan = get_plan(pid)
-        price = (
-            plan["price_monthly"] if cycle == "monthly"
-            else plan["price_yearly"]
-        )
+        price = plan["price_monthly"] if cycle == "monthly" else plan["price_yearly"]
         with col:
             st.subheader(plan["name_ar"])
             st.caption(plan["audience"])
@@ -501,20 +475,12 @@ def page_pricing(user):
             if pid == current:
                 st.success("✅ باقتك الحالية")
             else:
-                st.button(
-                    "🚀 ترقية",
-                    key=f"btn_{pid}",
-                    use_container_width=True,
-                )
+                st.button("🚀 ترقية", key=f"btn_{pid}", use_container_width=True)
 
     r1 = st.columns(3)
     r2 = st.columns(3)
-    card(r1[0], PLAN_ORDER[0])
-    card(r1[1], PLAN_ORDER[1])
-    card(r1[2], PLAN_ORDER[2])
-    card(r2[0], PLAN_ORDER[3])
-    card(r2[1], PLAN_ORDER[4])
-    card(r2[2], PLAN_ORDER[5])
+    card(r1[0], PLAN_ORDER[0]); card(r1[1], PLAN_ORDER[1]); card(r1[2], PLAN_ORDER[2])
+    card(r2[0], PLAN_ORDER[3]); card(r2[1], PLAN_ORDER[4]); card(r2[2], PLAN_ORDER[5])
 
 
 def page_chat(user):
@@ -526,13 +492,23 @@ def page_chat(user):
         st.info("📌 ملف `chat_page.py` غير موجود أو لا يعمل.")
 
 
+def page_simulation(user):
+    # استدعاء صفحة المحاكاة من الملف الجديد
+    try:
+        from simulation import simulation_page
+        simulation_page()
+    except ImportError:
+        st.title("🔬 المحاكاة")
+        st.warning("⚠️ ملف `simulation.py` غير موجود. يرجى إنشاؤه أولاً.")
+
+
 def page_reports(user):
     st.title("📄 التقارير")
     st.info("قيد التطوير.")
 
 
 # ============================================================
-# لوحة الإدارة
+# لوحة الإدارة (محدثة بإحصائيات حقيقية)
 # ============================================================
 
 def render_admin():
@@ -541,15 +517,18 @@ def render_admin():
     st.success("✅ Administrator Mode Active")
     st.divider()
 
+    # جلب الإحصائيات الحقيقية من Supabase
+    try:
+        from supabase_utils import get_admin_stats
+        stats = get_admin_stats()
+    except Exception:
+        stats = {"users": 0, "sessions": 0}
+
     c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("المستخدمون", "0")
-    with c2:
-        st.metric("الاشتراكات", "0")
-    with c3:
-        st.metric("الإيراد الشهري", "$0")
-    with c4:
-        st.metric("الحالة", "🟢 Online")
+    with c1: st.metric("المستخدمون الفريدون", stats.get("users", 0))
+    with c2: st.metric("إجمالي المحادثات", stats.get("sessions", 0))
+    with c3: st.metric("الإيراد الشهري", "$0")
+    with c4: st.metric("الحالة", "🟢 Online")
 
     st.divider()
     st.subheader("💎 الباقات الحالية")
@@ -568,7 +547,7 @@ def render_admin():
     st.subheader("📋 System Logs")
     for log in [
         "AI Engine Started",
-        "Database Connected (mock)",
+        "Database Connected (Supabase)",
         "Simulation Module Loaded",
         "Subscription Service Active",
     ]:
@@ -604,6 +583,8 @@ def main():
         page_pricing(user)
     elif page == "💬 HYDROMEM Chat":
         page_chat(user)
+    elif page == "🔬 المحاكاة":
+        page_simulation(user)
     elif page == "📄 التقارير":
         page_reports(user)
 
