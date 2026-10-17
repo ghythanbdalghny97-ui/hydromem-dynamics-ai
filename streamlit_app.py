@@ -165,8 +165,15 @@ def page_payment(user):
 
 def render_admin():
     st.title("🔐 HYDROMEM Admin Center")
+    
     if st.button("🚪 خروج من الإدارة"):
         st.session_state.admin_verified = False
+        # 🌟 التعديل الجديد: جلب أحدث بيانات المستخدم لتحديث الباقة فوراً
+        if st.session_state.user and st.session_state.user.get("email"):
+            fresh_user = auth_db.get_user_by_email(st.session_state.user["email"])
+            if fresh_user:
+                st.session_state.user = fresh_user
+                save_session_to_cookie(fresh_user)
         st.rerun()
         
     st.divider()
@@ -182,7 +189,7 @@ def render_admin():
                 st.write(f"التاريخ: {p['created_at']}")
                 if st.button("✅ موافقة وتفعيل الباقة", key=p['id']):
                     if auth_db.approve_payment(p['id'], p['user_email'], p['plan']):
-                        st.success("تم التفعيل بنجاح! يرجى الطلب من العميل إعادة تسجيل الدخول.")
+                        st.success("تم التفعيل بنجاح! اضغط على 'خروج من الإدارة' لرؤية التحديث.")
                         st.rerun()
                     else:
                         st.error("حدث خطأ أثناء التفعيل.")
