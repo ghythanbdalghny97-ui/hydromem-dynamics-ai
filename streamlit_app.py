@@ -1,14 +1,8 @@
-# ============================================================
-# HYDROMEM Dynamics AI
-# streamlit_app.py — Main Application v23.0 (Real DB & Payments)
-# ============================================================
-
 import re
 import streamlit as st
 from datetime import datetime, timedelta
 import auth_db
 
-# Cookie Manager
 try:
     import extra_streamlit_components as stx
     COOKIES_AVAILABLE = True
@@ -17,9 +11,6 @@ except ImportError:
 
 st.set_page_config(page_title="HYDROMEM Dynamics AI", page_icon="🧬", layout="wide")
 
-# ============================================================
-# الباقات
-# ============================================================
 PLANS = {
     "individual": {"name_ar": "👤 فردي", "price_m": 19, "price_y": 190, "users": 1},
     "researcher": {"name_ar": "🔬 باحث", "price_m": 79, "price_y": 790, "users": 1},
@@ -39,7 +30,7 @@ ACCOUNT_TYPES = {
 SCIENTIFIC_DISCLAIMER = "⚠️ HYDROMEM أداة محاكاة حسابية. النتائج تحتاج تحققاً تجريبياً قبل التطبيق الواقعي."
 
 # ============================================================
-# إدارة الجلسة والكوكيز
+# إدارة الجلسة والكوكيز (تسجيل دخول دائم)
 # ============================================================
 if COOKIES_AVAILABLE:
     cookie_manager = stx.CookieManager(key="hydromem_cookies")
@@ -74,16 +65,22 @@ def delete_session_cookie():
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "user" not in st.session_state: st.session_state.user = None
 if "admin_verified" not in st.session_state: st.session_state.admin_verified = False
-if "cookies_checked" not in st.session_state: st.session_state.cookies_checked = False
 
-# استعادة الجلسة من الكوكيز
-if not st.session_state.logged_in and not st.session_state.cookies_checked:
-    st.session_state.cookies_checked = True
+# ============================================================
+# استعادة الجلسة تلقائياً عند فتح التطبيق
+# ============================================================
+if not st.session_state.logged_in:
     saved = load_session_from_cookie()
-    if saved:
-        st.session_state.logged_in = True
-        st.session_state.user = saved
-        st.rerun()
+    if saved and saved.get("email"):
+        # جلب أحدث البيانات من قاعدة البيانات (لتحديث الباقة إذا تمت الموافقة عليها)
+        fresh_user = auth_db.get_user_by_email(saved["email"])
+        if fresh_user:
+            st.session_state.logged_in = True
+            st.session_state.user = fresh_user
+            save_session_to_cookie(fresh_user) # تحديث الكوكيز
+            st.rerun()
+        else:
+            delete_session_cookie()
 
 # ============================================================
 # دوال مساعدة
@@ -91,9 +88,6 @@ if not st.session_state.logged_in and not st.session_state.cookies_checked:
 def is_valid_email(email):
     return bool(re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", email))
 
-# ============================================================
-# صفحة الدخول والتسجيل (مرتبطة بقاعدة البيانات)
-# ============================================================
 def render_auth():
     st.title("🧬 HYDROMEM Dynamics AI")
     st.caption("منصة ذكاء اصطناعي للمحاكاة والتحليل العلمي")
@@ -139,9 +133,6 @@ def render_auth():
                 else:
                     st.error(msg)
 
-# ============================================================
-# صفحة الدفع (الجادلي)
-# ============================================================
 def page_payment(user):
     st.title("💳 ترقية الاشتراك")
     st.info("الدفع الإلكتروني بالبطاقات قيد التفعيل. حالياً يمكنك الدفع عبر تحويل محلي (الجادلي) ورفع رقم الإيصال.")
@@ -172,9 +163,6 @@ def page_payment(user):
             if success: st.success(msg)
             else: st.error(msg)
 
-# ============================================================
-# لوحة الإدارة
-# ============================================================
 def render_admin():
     st.title("🔐 HYDROMEM Admin Center")
     if st.button("🚪 خروج من الإدارة"):
@@ -199,9 +187,6 @@ def render_admin():
                     else:
                         st.error("حدث خطأ أثناء التفعيل.")
 
-# ============================================================
-# صفحات التطبيق
-# ============================================================
 def page_home(user):
     st.title("🏠 الرئيسية")
     st.success(f"مرحباً بك {user['name']} في HYDROMEM Dynamics AI")
@@ -226,9 +211,6 @@ def page_simulation(user):
         st.title("🔬 المحاكاة")
         st.warning("ملف simulation.py غير موجود. يرجى إنشاؤه أولاً.")
 
-# ============================================================
-# الراوتر (القائمة الرئيسية)
-# ============================================================
 def main():
     if not st.session_state.logged_in:
         render_auth()
@@ -251,7 +233,6 @@ def main():
             st.session_state.logged_in = False
             st.session_state.user = None
             st.session_state.admin_verified = False
-            st.session_state.cookies_checked = False
             st.rerun()
             
         page = st.radio("القائمة", ["🏠 الرئيسية", "💬 HYDROMEM Chat", "🔬 المحاكاة", "💳 ترقية الاشتراك"])
