@@ -1,22 +1,25 @@
 # ============================================================
 # HYDROMEM Dynamics AI
-# streamlit_app.py — Main Unified Application
-# Version: v22.0 Fresh Start
-#
-# Copyright (c) 2026
-# Abdulghani Saleh Mohsen Mohammed Ghaithan
-# All Rights Reserved
+# streamlit_app.py — Main Application v22.1
+# Persistent Login via Cookies
 # ============================================================
 
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import streamlit as st
 
+# Cookie Manager (يُثبت من requirements.txt)
+try:
+    import extra_streamlit_components as stx
+    COOKIES_AVAILABLE = True
+except ImportError:
+    COOKIES_AVAILABLE = False
+
 
 # ============================================================
-# 0) إعداد الصفحة
+# إعداد الصفحة
 # ============================================================
 
 st.set_page_config(
@@ -28,140 +31,85 @@ st.set_page_config(
 
 
 # ============================================================
-# 1) المصدر الوحيد للحقيقة — الباقات
+# الباقات
 # ============================================================
 
 PLANS = {
     "individual": {
         "name_ar": "👤 فردي",
-        "name_en": "Individual",
         "audience": "للاستخدام الشخصي والتعلم",
-        "price_monthly": 19,
-        "price_yearly": 190,
-        "users": 1,
-        "projects": 5,
-        "simulations": 50,
-        "api": False,
-        "team": False,
-        "commercial": False,
+        "price_monthly": 19, "price_yearly": 190,
+        "users": 1, "projects": 5, "simulations": 50,
+        "api": False, "team": False, "commercial": False,
         "email_rule": "any",
         "features": [
-            "🤖 HYDROMEM Chat",
-            "⚙️ نماذج ديناميكية أساسية",
-            "📊 50 محاكاة شهرياً",
-            "📂 5 مشاريع شخصية",
-            "📄 تقارير PDF مختصرة",
+            "🤖 HYDROMEM Chat", "⚙️ نماذج أساسية",
+            "📊 50 محاكاة شهرياً", "📂 5 مشاريع",
         ],
     },
     "researcher": {
         "name_ar": "🔬 باحث",
-        "name_en": "Researcher",
         "audience": "للباحثين المستقلين",
-        "price_monthly": 79,
-        "price_yearly": 790,
-        "users": 1,
-        "projects": 50,
-        "simulations": 2000,
-        "api": "limited",
-        "team": False,
-        "commercial": "research_only",
+        "price_monthly": 79, "price_yearly": 790,
+        "users": 1, "projects": 50, "simulations": 2000,
+        "api": "limited", "team": False, "commercial": "research_only",
         "email_rule": "any",
         "features": [
-            "✅ كل مميزات الفرد",
-            "🧬 نماذج بحثية متقدمة",
-            "📈 تحليل الاستقرار",
-            "📊 تصدير CSV / Excel",
-            "📄 تقارير PDF علمية",
+            "✅ كل مميزات الفرد", "🧬 نماذج بحثية متقدمة",
+            "📈 تحليل الاستقرار", "📄 تقارير PDF علمية",
         ],
     },
     "laboratory": {
         "name_ar": "🧪 مختبر",
-        "name_en": "Laboratory",
         "audience": "للمختبرات البحثية",
-        "price_monthly": 299,
-        "price_yearly": 2990,
-        "users": 5,
-        "projects": 200,
-        "simulations": 10000,
-        "api": "limited",
-        "team": True,
-        "commercial": "contract",
+        "price_monthly": 299, "price_yearly": 2990,
+        "users": 5, "projects": 200, "simulations": 10000,
+        "api": "limited", "team": True, "commercial": "contract",
         "email_rule": "any",
         "features": [
-            "✅ كل مميزات الباحث",
-            "👥 5 مستخدمين",
-            "📂 مساحة مشاريع مشتركة",
-            "📋 سجل التجارب",
+            "✅ كل مميزات الباحث", "👥 5 مستخدمين",
+            "📂 مساحة مشاريع مشتركة", "📋 سجل التجارب",
         ],
     },
     "university": {
         "name_ar": "🎓 جامعة",
-        "name_en": "University",
         "audience": "للمؤسسات الأكاديمية",
-        "price_monthly": 1500,
-        "price_yearly": 15000,
-        "users": 50,
-        "projects": 1000,
-        "simulations": 100000,
-        "api": True,
-        "team": True,
-        "commercial": "academic_only",
+        "price_monthly": 1500, "price_yearly": 15000,
+        "users": 50, "projects": 1000, "simulations": 100000,
+        "api": True, "team": True, "commercial": "academic_only",
         "email_rule": "academic",
         "features": [
-            "✅ كل مميزات المختبر",
-            "👥 50 مستخدم",
-            "🎓 إدارة الباحثين والطلاب",
-            "🔑 API أكاديمي كامل",
+            "✅ كل مميزات المختبر", "👥 50 مستخدم",
+            "🎓 إدارة الباحثين والطلاب", "🔑 API أكاديمي",
         ],
     },
     "hospital": {
         "name_ar": "🏥 مستشفى",
-        "name_en": "Hospital",
         "audience": "للمؤسسات الطبية",
-        "price_monthly": 2500,
-        "price_yearly": 25000,
-        "users": 100,
-        "projects": 1000,
-        "simulations": 100000,
-        "api": True,
-        "team": True,
-        "commercial": "medical_research",
+        "price_monthly": 2500, "price_yearly": 25000,
+        "users": 100, "projects": 1000, "simulations": 100000,
+        "api": True, "team": True, "commercial": "medical_research",
         "email_rule": "organization",
         "features": [
-            "✅ كل مميزات الجامعة",
-            "👥 100 مستخدم",
-            "🩺 نماذج طبية متخصصة",
-            "🏥 إدارة الأقسام",
+            "✅ كل مميزات الجامعة", "👥 100 مستخدم",
+            "🩺 نماذج طبية متخصصة", "🏥 إدارة الأقسام",
         ],
     },
     "enterprise": {
         "name_ar": "🏢 شركة",
-        "name_en": "Enterprise",
-        "audience": "للشركات الصناعية والتقنية",
-        "price_monthly": 5000,
-        "price_yearly": 50000,
-        "users": "∞",
-        "projects": "∞",
-        "simulations": "∞",
-        "api": "full",
-        "team": True,
-        "commercial": True,
+        "audience": "للشركات",
+        "price_monthly": 5000, "price_yearly": 50000,
+        "users": "∞", "projects": "∞", "simulations": "∞",
+        "api": "full", "team": True, "commercial": True,
         "email_rule": "corporate",
         "features": [
-            "✅ كل مميزات المستشفى",
-            "👥 مستخدمون غير محدودين",
-            "🔑 API كامل",
-            "🏢 بيئة خاصة",
+            "✅ كل مميزات المستشفى", "👥 مستخدمون غير محدودين",
+            "🔑 API كامل", "🏢 بيئة خاصة",
         ],
     },
 }
 
-
-PLAN_ORDER = [
-    "individual", "researcher", "laboratory",
-    "university", "hospital", "enterprise",
-]
-
+PLAN_ORDER = list(PLANS.keys())
 
 SCIENTIFIC_DISCLAIMER = (
     "⚠️ HYDROMEM أداة محاكاة حسابية. "
@@ -171,28 +119,67 @@ SCIENTIFIC_DISCLAIMER = (
 
 
 # ============================================================
-# 2) دوال مساعدة
+# Cookies Manager
+# ============================================================
+
+if COOKIES_AVAILABLE:
+    cookie_manager = stx.CookieManager(key="hydromem_cookies")
+else:
+    cookie_manager = None
+
+
+COOKIE_KEY = "hydromem_session"
+COOKIE_EXPIRY_DAYS = 30
+
+
+def save_session_to_cookie(user):
+    """يحفظ الجلسة في المتصفح لمدة 30 يوماً."""
+    if not COOKIES_AVAILABLE or cookie_manager is None:
+        return
+    try:
+        import json
+        data = json.dumps(user, ensure_ascii=False)
+        cookie_manager.set(
+            COOKIE_KEY,
+            data,
+            expires_at=datetime.now() + timedelta(days=COOKIE_EXPIRY_DAYS),
+            key="set_session",
+        )
+    except Exception:
+        pass
+
+
+def load_session_from_cookie():
+    """يقرأ الجلسة من المتصفح إذا وجدت."""
+    if not COOKIES_AVAILABLE or cookie_manager is None:
+        return None
+    try:
+        import json
+        raw = cookie_manager.get(COOKIE_KEY)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+    return None
+
+
+def delete_session_cookie():
+    """يحذف الجلسة من المتصفح."""
+    if not COOKIES_AVAILABLE or cookie_manager is None:
+        return
+    try:
+        cookie_manager.delete(COOKIE_KEY, key="del_session")
+    except Exception:
+        pass
+
+
+# ============================================================
+# دوال مساعدة
 # ============================================================
 
 def get_plan(plan_id):
     return PLANS.get(plan_id)
 
-
-def get_price(plan_id, cycle="monthly"):
-    plan = PLANS.get(plan_id)
-    if not plan:
-        return None
-    return plan["price_monthly"] if cycle == "monthly" else plan["price_yearly"]
-
-
-def plan_name(plan_id):
-    plan = PLANS.get(plan_id)
-    return plan["name_ar"] if plan else "غير معروف"
-
-
-# ============================================================
-# 3) التحقق من البريد
-# ============================================================
 
 PERSONAL_DOMAINS = {
     "gmail.com", "yahoo.com", "hotmail.com",
@@ -225,18 +212,14 @@ def is_personal(email):
 def validate_registration(name, email, password, account_type, org=None):
     if not name or len(name.strip()) < 2:
         return False, "❌ الرجاء إدخال الاسم الكامل."
-
     if not is_valid_email(email):
         return False, "❌ صيغة البريد غير صحيحة."
-
     if not password or len(password) < 8:
         return False, "❌ كلمة المرور يجب أن تكون 8 أحرف على الأقل."
-
     if account_type not in ACCOUNT_TYPES:
         return False, "❌ نوع الحساب غير معروف."
 
     plan = get_plan(account_type)
-
     needs_org = account_type in (
         "laboratory", "university", "hospital", "enterprise"
     )
@@ -244,16 +227,13 @@ def validate_registration(name, email, password, account_type, org=None):
         return False, f"❌ حساب {ACCOUNT_TYPES[account_type]} يتطلب اسم المؤسسة."
 
     rule = plan["email_rule"]
-
     if rule == "corporate" and is_personal(email):
         return False, "🏢 باقة الشركة لا تقبل البريد الشخصي."
-
     if rule == "academic":
         d = get_domain(email)
         if not (d.endswith(".edu") or "university" in d
                 or "college" in d or "ac." in d):
             return False, "🎓 باقة الجامعة تتطلب بريداً أكاديمياً."
-
     if rule == "organization" and is_personal(email):
         return False, "🏥 باقة المستشفى تتطلب بريداً مؤسسياً."
 
@@ -261,7 +241,7 @@ def validate_registration(name, email, password, account_type, org=None):
 
 
 # ============================================================
-# 4) الجلسة
+# تهيئة الجلسة (مع Cookies)
 # ============================================================
 
 def init_session():
@@ -269,6 +249,7 @@ def init_session():
         "logged_in": False,
         "user": None,
         "admin_verified": False,
+        "cookies_checked": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -278,8 +259,18 @@ def init_session():
 init_session()
 
 
+# محاولة استعادة الجلسة من المتصفح مرة واحدة فقط
+if not st.session_state.logged_in and not st.session_state.cookies_checked:
+    st.session_state.cookies_checked = True
+    saved = load_session_from_cookie()
+    if saved:
+        st.session_state.logged_in = True
+        st.session_state.user = saved
+        st.rerun()
+
+
 # ============================================================
-# 5) صفحة الدخول والتسجيل
+# صفحة الدخول والتسجيل
 # ============================================================
 
 def render_auth():
@@ -293,6 +284,9 @@ def render_auth():
         with st.form("login"):
             email = st.text_input("البريد الإلكتروني")
             password = st.text_input("كلمة المرور", type="password")
+            remember = st.checkbox(
+                "ابقني مسجلاً لمدة 30 يوماً", value=True
+            )
             ok = st.form_submit_button("دخول", use_container_width=True)
 
         if ok:
@@ -301,18 +295,26 @@ def render_auth():
             elif len(password) < 8:
                 st.error("❌ كلمة المرور قصيرة.")
             else:
-                st.session_state.logged_in = True
-                st.session_state.user = {
+                user_data = {
                     "name": email.split("@")[0],
                     "email": email.lower(),
                     "account_type": "individual",
                     "plan": "individual",
                     "organization": None,
                 }
+                st.session_state.logged_in = True
+                st.session_state.user = user_data
+
+                if remember:
+                    save_session_to_cookie(user_data)
+
                 st.success("✅ تم الدخول")
                 st.rerun()
 
-        st.info("ℹ️ وضع تجريبي: أي بريد صالح يعمل حالياً.")
+        st.info(
+            "ℹ️ وضع تجريبي: أي بريد صالح يعمل حالياً. "
+            "سيتم ربط Supabase Auth لاحقاً."
+        )
 
     with tab_register:
         with st.form("register"):
@@ -324,7 +326,6 @@ def render_auth():
                 options=list(ACCOUNT_TYPES.keys()),
                 format_func=lambda k: ACCOUNT_TYPES[k],
             )
-
             org = None
             if account_type in ("laboratory", "university",
                                 "hospital", "enterprise"):
@@ -341,8 +342,7 @@ def render_auth():
             if not valid:
                 st.error(msg)
             else:
-                st.session_state.logged_in = True
-                st.session_state.user = {
+                user_data = {
                     "name": name.strip(),
                     "email": email.lower(),
                     "account_type": account_type,
@@ -350,12 +350,15 @@ def render_auth():
                     "organization": org.strip() if org else None,
                     "registered_at": datetime.utcnow().isoformat(),
                 }
+                st.session_state.logged_in = True
+                st.session_state.user = user_data
+                save_session_to_cookie(user_data)
                 st.success(msg)
                 st.rerun()
 
 
 # ============================================================
-# 6) الشريط الجانبي
+# الشريط الجانبي
 # ============================================================
 
 def render_sidebar(user):
@@ -371,10 +374,8 @@ def render_sidebar(user):
         page = st.radio(
             "القائمة",
             [
-                "🏠 الرئيسية",
-                "📊 لوحتي",
-                "💎 الباقات",
-                "💬 HYDROMEM Chat",
+                "🏠 الرئيسية", "📊 لوحتي",
+                "💎 الباقات", "💬 HYDROMEM Chat",
                 "📄 التقارير",
             ],
             key="nav",
@@ -383,24 +384,21 @@ def render_sidebar(user):
         st.divider()
 
         if st.button("🚪 تسجيل الخروج", use_container_width=True):
+            delete_session_cookie()
             st.session_state.logged_in = False
             st.session_state.user = None
             st.session_state.admin_verified = False
+            st.session_state.cookies_checked = False
             st.rerun()
 
         st.divider()
 
-        # بوابة الإدارة المخفية
         with st.expander("🔒", expanded=False):
             token = st.text_input(
-                "Admin Token",
-                type="password",
-                key="admin_token",
+                "Admin Token", type="password", key="admin_token"
             )
             if st.button("دخول الإدارة", key="admin_btn"):
-                saved = st.secrets.get(
-                    "ADMIN_MASTER_KEY", "CHANGE_ME"
-                )
+                saved = st.secrets.get("ADMIN_MASTER_KEY", "CHANGE_ME")
                 if token and token == saved:
                     st.session_state.admin_verified = True
                     st.rerun()
@@ -411,12 +409,11 @@ def render_sidebar(user):
 
 
 # ============================================================
-# 7) الصفحات
+# الصفحات
 # ============================================================
 
 def page_home(user):
     plan = get_plan(user.get("plan", "individual"))
-
     st.title("🏠 HYDROMEM Dynamics AI")
     st.caption(f"مرحباً {user['name']} — {plan['name_ar']}")
     st.divider()
@@ -438,7 +435,6 @@ def page_home(user):
 
     st.divider()
     st.subheader("🚀 ابدأ الآن")
-
     c1, c2, c3 = st.columns(3)
     with c1:
         st.button("💬 HYDROMEM Chat", use_container_width=True)
@@ -453,7 +449,6 @@ def page_home(user):
 
 def page_dashboard(user):
     plan = get_plan(user.get("plan", "individual"))
-
     st.title(f"📊 لوحة {plan['name_ar']}")
     st.caption(plan["audience"])
     st.divider()
@@ -467,11 +462,9 @@ def page_dashboard(user):
         st.metric("💾 التخزين", "0 MB")
 
     st.divider()
-
     if plan["team"]:
         st.subheader("👥 إدارة الفريق")
         st.info(f"لديك {plan['users']} مستخدم متاح.")
-
     if plan["api"]:
         st.subheader("🔑 API")
         st.info("إدارة مفاتيح API قيد التطوير.")
@@ -481,7 +474,6 @@ def page_dashboard(user):
 
 def page_pricing(user):
     current = user.get("plan", "individual")
-
     st.title("💎 باقات HYDROMEM")
     st.caption("اختر الباقة المناسبة")
     st.divider()
@@ -496,27 +488,27 @@ def page_pricing(user):
 
     def card(col, pid):
         plan = get_plan(pid)
-        price = get_price(pid, cycle)
+        price = (
+            plan["price_monthly"] if cycle == "monthly"
+            else plan["price_yearly"]
+        )
         with col:
             st.subheader(plan["name_ar"])
             st.caption(plan["audience"])
             st.metric("السعر", f"${price}")
-
             for f in plan["features"][:4]:
                 st.write(f)
-
             if pid == current:
                 st.success("✅ باقتك الحالية")
             else:
                 st.button(
-                    f"🚀 ترقية",
+                    "🚀 ترقية",
                     key=f"btn_{pid}",
                     use_container_width=True,
                 )
 
     r1 = st.columns(3)
     r2 = st.columns(3)
-
     card(r1[0], PLAN_ORDER[0])
     card(r1[1], PLAN_ORDER[1])
     card(r1[2], PLAN_ORDER[2])
@@ -526,18 +518,12 @@ def page_pricing(user):
 
 
 def page_chat(user):
-    # محاولة استيراد chat_page.py إذا موجود
     try:
         from chat_page import chat_page
         chat_page()
     except ImportError:
         st.title("💬 HYDROMEM Chat")
         st.info("📌 ملف `chat_page.py` غير موجود أو لا يعمل.")
-        st.markdown(
-            "**لتفعيل الدردشة، تأكد من وجود `chat_page.py` "
-            "في المستودع، أو أضف GROQ_API_KEY / GEMINI_API_KEY "
-            "في secrets.**"
-        )
 
 
 def page_reports(user):
@@ -546,7 +532,7 @@ def page_reports(user):
 
 
 # ============================================================
-# 8) لوحة الإدارة
+# لوحة الإدارة
 # ============================================================
 
 def render_admin():
@@ -567,7 +553,6 @@ def render_admin():
 
     st.divider()
     st.subheader("💎 الباقات الحالية")
-
     rows = [["الباقة", "شهري", "سنوي", "المستخدمون"]]
     for pid in PLAN_ORDER:
         p = get_plan(pid)
@@ -596,21 +581,18 @@ def render_admin():
 
 
 # ============================================================
-# 9) الراوتر الرئيسي
+# الراوتر
 # ============================================================
 
 def main():
-    # غير مسجل
     if not st.session_state.logged_in:
         render_auth()
         return
 
-    # مسؤول
     if st.session_state.admin_verified:
         render_admin()
         return
 
-    # مستخدم عادي
     user = st.session_state.user
     page = render_sidebar(user)
 
@@ -625,10 +607,6 @@ def main():
     elif page == "📄 التقارير":
         page_reports(user)
 
-
-# ============================================================
-# 10) التشغيل
-# ============================================================
 
 if __name__ == "__main__":
     main()
