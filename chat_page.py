@@ -1,6 +1,6 @@
 # ============================================================
 # HYDROMEM Chat - AI Scientific & Medical Assistant
-# Version 5.0 — Consolidated for streamlit_app.py
+# Version 5.1 — Speed Optimized
 #
 # Copyright (c) 2026
 # Abdulghani Saleh Mohsen Mohammed Ghaithan
@@ -62,12 +62,12 @@ except Exception:
 
 
 # ============================================================
-# Constants
+# Constants (تم تعديلها لتسريع الرد)
 # ============================================================
 
 MAX_TITLE_LENGTH = 45
 STREAM_TEMPERATURE = 0.7
-MAX_GROQ_MODELS = 6
+MAX_GROQ_MODELS = 2  # تم التقليل لتسريع الاستجابة
 MAX_GEMINI_RETRY = 2
 
 MEDICAL_DISCLAIMER = (
@@ -222,7 +222,7 @@ def sanitize_response(text):
 
 
 # ============================================================
-# Groq Models Discovery
+# Groq Models Discovery (تم تعديلها لتسريع الرد)
 # ============================================================
 
 def get_groq_models(client):
@@ -232,21 +232,18 @@ def get_groq_models(client):
             m.id for m in models
             if any(x in m.id.lower() for x in ("llama", "mixtral", "gemma"))
         ]
+        # 8B هو الأسرع، 70B أذكى لكن أبطأ
         priority = [
-            "llama-3.3-70b-versatile",
-            "llama-3.1-70b-versatile",
             "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768",
-            "gemma2-9b-it",
+            "llama-3.3-70b-versatile",
         ]
         result = [m for m in priority if m in available]
         result += [m for m in available if m not in result]
         return result[:MAX_GROQ_MODELS]
     except Exception:
         return [
-            "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768",
+            "llama-3.3-70b-versatile",
         ]
 
 
@@ -288,7 +285,7 @@ def call_ai_stream(contents):
         contents[0] if isinstance(contents, list) else str(contents)
     )
 
-    # 1) Groq
+    # 1) Groq (الأسرع)
     if GROQ_AVAILABLE:
         try:
             key = st.secrets.get("GROQ_API_KEY", "").strip()
