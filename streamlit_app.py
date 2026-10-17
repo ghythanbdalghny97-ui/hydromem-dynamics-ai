@@ -3,12 +3,6 @@ import streamlit as st
 from datetime import datetime, timedelta
 import auth_db
 
-try:
-    import extra_streamlit_components as stx
-    COOKIES_AVAILABLE = True
-except ImportError:
-    COOKIES_AVAILABLE = False
-
 st.set_page_config(page_title="HYDROMEM Dynamics AI", page_icon="🧬", layout="wide")
 
 PLANS = {
@@ -22,37 +16,27 @@ PLANS = {
 
 ACCOUNT_TYPES = {"individual": "👤 فردي", "researcher": "🔬 باحث", "laboratory": "🧪 مختبر", "university": "🎓 جامعة", "hospital": "🏥 مستشفى", "enterprise": "🏢 شركة"}
 
-if COOKIES_AVAILABLE:
-    cookie_manager = stx.CookieManager(key="hydromem_cookies")
-else:
-    cookie_manager = None
-
-def save_cookie(user):
-    if cookie_manager:
-        import json
-        cookie_manager.set("hydromem_sess", json.dumps(user, default=str), expires_at=datetime.now() + timedelta(days=30))
-
-def load_cookie():
-    if cookie_manager:
-        import json
-        raw = cookie_manager.get("hydromem_sess")
-        if raw: return json.loads(raw)
-    return None
-
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "user" not in st.session_state: st.session_state.user = None
 if "admin_verified" not in st.session_state: st.session_state.admin_verified = False
 
+# ============================================================
+# نظام الدخول الدائم (عبر حفظ البريد في الرابط)
+# ============================================================
+# 1. إذا كان المستخدم مسجل دخول بالفعل في الجلسة الحالية، لا نفعل شيئاً.
+# 2. إذا لم يكن مسجل دخول، نتحقق من وجود البريد في الرابط (URL).
 if not st.session_state.logged_in:
-    saved = load_cookie()
-    if saved and saved.get("email"):
-        fresh = auth_db.get_user_by_email(saved["email"])
-        if fresh:
+    if "user_email" in st.query_params:
+        email = st.query_params["user_email"]
+        fresh_user = auth_db.get_user_by_email(email)
+        if fresh_user:
             st.session_state.logged_in = True
-            st.session_state.user = fresh
-            save_cookie(fresh)
+            st.session_state.user = fresh_user
             st.rerun()
 
+# ============================================================
+# صفحة الدخول والتسجيل
+# ============================================================
 def render_auth():
     st.title("🧬 HYDROMEM Dynamics AI")
     tab1, tab2 = st.tabs(["🔐 دخول", "📝 تسجيل جديد"])
@@ -61,12 +45,13 @@ def render_auth():
         with st.form("login"):
             email = st.text_input("البريد")
             pwd = st.text_input("كلمة المرور", type="password")
-            if st.form_submit_button("دخول"):
+            if st.form_submit_button("دخول", use_container_width=True):
                 user = auth_db.login_user_db(email, pwd)
                 if user:
                     st.session_state.logged_in = True
                     st.session_state.user = user
-                    save_cookie(user)
+                    # 🌟 حفظ البريد في الرابط ليتذكرك المتصفح دائماً
+                    st.query_params["user_email"] = user["email"]
                     st.rerun()
                 else: st.error("بيانات خاطئة")
                     
@@ -77,13 +62,16 @@ def render_auth():
             pwd = st.text_input("كلمة المرور (8+)", type="password")
             acc_type = st.selectbox("نوع الحساب", options=list(ACCOUNT_TYPES.keys()), format_func=lambda x: ACCOUNT_TYPES[x])
             org = st.text_input("المؤسسة (اختياري)")
-            if st.form_submit_button("إنشاء حساب"):
+            if st.form_submit_button("إنشاء حساب", use_container_width=True):
                 if len(pwd) < 8: st.error("كلمة المرور قصيرة")
                 else:
                     success, msg = auth_db.register_user_db(email, pwd, name, acc_type, org)
-                    if success: st.success(msg)
+                    if success: st.success(msg + " يرجى الدخول.")
                     else: st.error(msg)
 
+# ============================================================
+# إدارة الفريق
+# ============================================================
 def page_team(user):
     st.title("👥 إدارة الفريق")
     max_u = PLANS.get(user['plan'], {}).get("users", 1)
@@ -109,6 +97,9 @@ def page_team(user):
                 if succ: st.success(msg); st.rerun()
                 else: st.error(msg)
 
+# ============================================================
+# صفحة الدفع
+# ============================================================
 def page_payment(user):
     st.title("💳 ترقية الاشتراك")
     plan_id = st.selectbox("اختر الباقة", options=list(PLANS.keys()), format_func=lambda x: PLANS[x]["name_ar"])
@@ -123,9 +114,12 @@ def page_payment(user):
                 if succ: st.success(msg)
                 else: st.error(msg)
 
+# ============================================================
+# لوحة الإدارة
+# ============================================================
 def render_admin():
     st.title("🔐 لوحة الإدارة")
-    if st.button("🚪 خروج"):
+    if st.button("🚪 خروج من الإدارة"):
         st.session_state.admin_verified = False
         fresh = auth_db.get_user_by_email(st.session_state.user["email"])
         if fresh: st.session_state.user = fresh
@@ -140,6 +134,9 @@ def render_admin():
                 if auth_db.approve_payment(p['id'], p.get('user_email'), p.get('plan')):
                     st.success("تم التفعيل!"); st.rerun()
 
+# ============================================================
+# الصفحة الرئيسية
+# ============================================================
 def page_home(user):
     st.title("🏠 الرئيسية")
     st.success(f"أهلاً {user['name']}")
@@ -148,6 +145,9 @@ def page_home(user):
     if expiry:
         st.info(f"الاشتراك ساري حتى: {expiry[:10]}")
 
+# ============================================================
+# الراوتر الرئيسي
+# ============================================================
 def main():
     if not st.session_state.logged_in:
         render_auth()
@@ -164,10 +164,12 @@ def main():
         st.title("🧬 HYDROMEM")
         st.info(f"الباقة: {plan_info['name_ar']}")
         
-        if st.button("🚪 تسجيل الخروج"):
+        # تسجيل الخروج (يمسح الرابط)
+        if st.button("🚪 تسجيل الخروج", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.user = None
-            if cookie_manager: cookie_manager.delete("hydromem_sess")
+            if "user_email" in st.query_params:
+                del st.query_params["user_email"]
             st.rerun()
             
         menu = ["🏠 الرئيسية", "💬 HYDROMEM Chat", "🔬 المحاكاة", "💳 ترقية الاشتراك"]
