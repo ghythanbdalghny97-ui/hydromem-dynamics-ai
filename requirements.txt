@@ -1,11 +1,10 @@
-# HYDROMEM Dynamics AI — Requirements v22.1
 streamlit>=1.32.0
+supabase>=2.0.0
+extra-streamlit-components>=0.1.71
+scipy>=1.11.0
+numpy>=1.26.0
+pandas>=2.0.0
+fpdf2>=2.7.0
 groq>=0.11.0
 google-genai>=0.3.0
-supabase>=2.0.0
 Pillow>=10.0.0
-numpy>=1.26.0
-scipy>=1.11.0
-requests>=2.31.0
-python-dateutil>=2.8.2
-extra-streamlit-components>=0.1.71
