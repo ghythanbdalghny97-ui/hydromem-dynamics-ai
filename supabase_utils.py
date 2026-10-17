@@ -1,7 +1,7 @@
 # ============================================================
 # HYDROMEM Dynamics AI
-# supabase_utils.py — Chat History Storage
-# Version: v22.0
+# supabase_utils.py — Chat History & Admin Stats
+# Version: v22.2 (Ultimate)
 # ============================================================
 
 from datetime import datetime
@@ -124,3 +124,28 @@ def delete_chat_session(session_id):
 
 def is_available():
     return _get_client() is not None
+
+
+# ============================================================
+# Admin Stats (للوحة الإدارة)
+# ============================================================
+
+def get_admin_stats():
+    """يجلب إحصائيات حقيقية للوحة الإدارة (عدد المستخدمين والمحادثات)"""
+    client = _get_client()
+    if not client:
+        return {"users": 0, "sessions": 0}
+    
+    try:
+        # جلب كل سجلات المحادثات لعدّها
+        res = client.table("chat_sessions").select("user_identifier").execute()
+        data = res.data or []
+        
+        # حساب عدد المستخدمين الفريدين
+        unique_users = len(set([r["user_identifier"] for r in data if r.get("user_identifier")]))
+        # حساب إجمالي المحادثات
+        total_sessions = len(data)
+        
+        return {"users": unique_users, "sessions": total_sessions}
+    except Exception:
+        return {"users": 0, "sessions": 0}
