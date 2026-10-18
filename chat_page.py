@@ -11,38 +11,34 @@ def chat_page():
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # عرض الرسائل السابقة بطريقة بسيطة
+    # عرض الرسائل السابقة
     for msg in st.session_state.messages:
         if msg["role"] == "user":
-            st.markdown(f"**🧑‍🔬 أنت:** {msg['content']}")
+            st.info(f"🧑‍🔬 أنت: {msg['content']}")
         else:
-            st.markdown(f"**🤖 HYDROMEM:** {msg['content']}")
+            st.success(f"🤖 HYDROMEM: {msg['content']}")
 
-    # استقبال رسالة جديدة
+    # مربع الإدخال
     prompt = st.text_input("اكتب سؤالك هنا واضغط Enter:")
     
     if prompt:
         # إضافة سؤال المستخدم
         st.session_state.messages.append({"role": "user", "content": prompt})
-        st.markdown(f"**🧑‍🔬 أنت:** {prompt}")
+        st.info(f"🧑‍🔬 أنت: {prompt}")
         
-        # جلب الرد
-        with st.spinner("جاري التفكير..."):
-            try:
-                from groq import Groq
-                client = Groq(api_key=groq_key)
-                
-                completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": "أنت مساعد علمي. أجب باللغة العربية."},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                
-                response = completion.choices[0].message.content
-                st.markdown(f"**🤖 HYDROMEM:** {response}")
-                st.session_state.messages.append({"role": "assistant", "content": response})
-                
-            except Exception as e:
-                st.error(f"حدث خطأ في الاتصال: {e}")
+        # جلب الرد من الذكاء الاصطناعي
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_key)
+            
+            completion = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            response = completion.choices[0].message.content
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.success(f"🤖 HYDROMEM: {response}")
+            
+        except Exception as e:
+            st.error(f"حدث خطأ في الاتصال: {e}")
