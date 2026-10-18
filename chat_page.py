@@ -1,5 +1,4 @@
 import streamlit as st
-import time
 
 def chat_page():
     st.title("💬 HYDROMEM Chat AI")
@@ -12,11 +11,13 @@ def chat_page():
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    # عرض الرسائل السابقة
     for msg in st.session_state.messages:
         if msg["role"] == "user":
             st.info(f"🧑‍🔬 أنت: {msg['content']}")
         else:
-            st.success(f"🤖 HYDROMEM: {msg['content']}")
+            # استخدام markdown لعرض المعادلات الرياضية بشكل صحيح
+            st.markdown(f"**🤖 HYDROMEM:**\n\n{msg['content']}")
 
     prompt = st.text_input("اكتب سؤالك هنا واضغط Enter:")
     
@@ -28,12 +29,7 @@ def chat_page():
             from groq import Groq
             client = Groq(api_key=groq_key)
             
-            models_to_try = [
-                "openai/gpt-oss-120b",
-                "openai/gpt-oss-20b",
-                "qwen/qwen3.8-27b"
-            ]
-            
+            models_to_try = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
             response = None
             last_error = ""
             
@@ -41,17 +37,21 @@ def chat_page():
                 try:
                     completion = client.chat.completions.create(
                         model=model_name,
-                        messages=[{"role": "user", "content": prompt}]
+                        messages=[
+                            # نطلب من الذكاء الاصطناعي استخدام تنسيق المعادلات الصحيح
+                            {"role": "system", "content": "أنت مساعد علمي. أجب باللغة العربية. استخدم $$ للمعادلات الرياضية المستقلة و $ للمعادلات المضمنة."},
+                            {"role": "user", "content": prompt}
+                        ]
                     )
                     response = completion.choices[0].message.content
                     break 
                 except Exception as e:
                     last_error = str(e)
-                    time.sleep(1) 
                     
             if response:
                 st.session_state.messages.append({"role": "assistant", "content": response})
-                st.success(f"🤖 HYDROMEM: {response}")
+                # عرض الرد كـ markdown ليفهم المعادلات
+                st.markdown(f"**🤖 HYDROMEM:**\n\n{response}")
             else:
                 st.error(f"عذراً، فشلت جميع النماذج. الخطأ الأخير: {last_error}")
                 
