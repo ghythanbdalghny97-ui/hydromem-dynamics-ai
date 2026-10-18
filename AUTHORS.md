@@ -1,68 +1,79 @@
-# Authors — المؤلفون
+# AUTHORS
 
-## المؤلف الرئيسي والمطور — Main Author & Developer
-
-**عبد الغني صالح محسن محمد غيثان**
-**Abdulghani Saleh Mohsen Mohammed Ghaithan**
-
-- **الدور:** مؤسس ومطور المشروع
-- **Role:** Founder & Lead Developer
-- **الموقع:** اليمن
-- **Location:** Yemen
-- **البريد الإلكتروني:** ghythanbdalghny97@gmail.com
-- **الهاتف:** +967 779193805
+## HYDROMEM Dynamics AI
 
 ---
 
-## المشروع — Project
+## Founder & Principal Author
 
-**HYDROMEM Dynamics AI**
-منصة ذكاء حاسوبي متعددة التطبيقات
-Computational Intelligence Platform for Complex Dynamic Systems
+**Abdul Ghani Saleh Mohsen Mohamed Ghaithan**  
+عبد الغني صالح محسن محمد غيثان
 
-**الإصدار:** 7.0
-**Version:** 7.0
+Role:
 
-**تاريخ الإنشاء:** 2026
-**Creation Date:** 2026
-
----
-
-## الإسهامات — Contributions
-
-- ✅ النمذجة الرياضية متعددة المقاييس
-- ✅ المحاكاة العددية (Euler + odeint)
-- ✅ تحليل الاستقرار (Jacobian + Eigenvalues)
-- ✅ مكونات الذكاء الاصطناعي (3 مكونات منفذة)
-- ✅ 5 تطبيقات طبية حية
-- ✅ واجهة تفاعلية (Streamlit)
-- ✅ الكود المصدري الكامل
+- Founder of HYDROMEM Dynamics
+- Independent Researcher – Yemen
+- Principal Investigator
+- Original Concept Developer
+- Software & Research Framework Designer
 
 ---
 
-## المساهمون — Contributors
+## Research Identity
 
-*حالياً: المؤسس فقط. المشروع مفتوح للمساهمين في المستقبل.*
+The HYDROMEM Dynamics AI project was initiated and developed as an independent research and computational framework for studying complex dynamic systems using:
 
-*Currently: Founder only. The project is open for future contributors.*
-
----
-
-## للتواصل — Contact
-
-لأي استفسارات قانونية أو تجارية:
-For any legal or commercial inquiries:
-
-📧 **ghythanbdalghny97@gmail.com**
-📞 **+967 779193805**
+- Mathematical modeling
+- Computational simulation
+- Artificial intelligence integration
+- Data analysis workflows
 
 ---
 
-## حقوق النشر — Copyright
+## Intellectual Contribution
 
-**© 2026 عبد الغني صالح محسن محمد غيثان — جميع الحقوق محفوظة**
-**© 2026 Abdulghani Saleh Mohsen Mohammed Ghaithan — All Rights Reserved**
+The founder is responsible for:
 
-هذا المشروع محمي بموجب قوانين حقوق المؤلف اليمنية (القانون رقم 15 لسنة 2012) والاتفاقيات الدولية (اتفاقية برن).
+- Original research concepts
+- Mathematical framework development
+- Computational architecture design
+- Project direction and vision
+- Prototype implementation strategy
 
-This project is protected by Yemeni Copyright Law (Law No. 15 of 2012) and international agreements (Berne Convention).
+---
+
+## Contact
+
+Email:
+
+ghythanbdalghny97@gmail.com
+
+Phone:
+
++967 779193805
+
+---
+
+## Contribution Policy
+
+Contributions, improvements, and collaborations are welcome.
+
+However, any modification, commercial use, redistribution, or derivative development based on the HYDROMEM Dynamics AI framework requires prior written permission from the rights holder.
+
+---
+
+## Current Development Status
+
+HYDROMEM Dynamics AI is currently:
+
+**Research Prototype (Computational Stage)**
+
+The platform provides computational tools and simulations.
+Experimental validation requires independent laboratory verification.
+
+---
+
+Copyright © 2026  
+Abdul Ghani Saleh Mohsen Mohamed Ghaithan
+
+All rights reserved.
