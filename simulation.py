@@ -4,39 +4,38 @@ import pandas as pd
 from scipy.integrate import odeint
 from fpdf import FPDF
 import auth_db
+import re
+
+def clean_text(text):
+    return re.sub(r'[^\x00-\x7F]+', '?', str(text))
 
 def generate_pdf(user_name, params, results_df):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, txt="HYDROMEM Dynamics AI - Simulation Report", ln=True, align='C')
-    pdf.cell(200, 10, txt=f"User: {user_name}", ln=True)
+    safe_name = clean_text(user_name)
+    pdf.cell(200, 10, txt=f"User: {safe_name}", ln=True)
     pdf.cell(200, 10, txt=f"Date: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
     pdf.cell(200, 10, txt="Parameters:", ln=True)
     for k, v in params.items():
         pdf.cell(200, 10, txt=f"{k}: {v}", ln=True)
-    
     pdf.cell(200, 10, txt="Final Results:", ln=True)
     last_row = results_df.iloc[-1]
     pdf.cell(200, 10, txt=f"A(t) = {last_row['A(t)']:.4f}", ln=True)
     pdf.cell(200, 10, txt=f"Theta(t) = {last_row['Theta(t)']:.4f}", ln=True)
-    
     return bytes(pdf.output())
 
 def simulation_page():
     st.title("🔬 محرك المحاكاة")
     user = st.session_state.user
-    
     st.markdown("### ⚙️ إعدادات المعاملات")
     
-    # تقسيم الشاشة إلى عمودين لتسهيل العرض على الجوال
     col1, col2 = st.columns(2)
-    
     with col1:
         r = st.slider("r (معدل النمو)", 0.1, 5.0, 1.0)
         beta = st.slider("beta (التخميد)", 0.01, 1.0, 0.1)
         gamma = st.slider("gamma (الاقتران)", 0.0, 2.0, 0.5)
-        
     with col2:
         eta = st.slider("eta", 0.1, 2.0, 1.0)
         mu = st.slider("mu", 0.0, 1.0, 0.1)
@@ -54,7 +53,6 @@ def simulation_page():
 
         t = np.linspace(0, 50, 500)
         sol = odeint(model, [0.1, 0.0], t)
-        
         df = pd.DataFrame({"Time": t, "A(t)": sol[:,0], "Theta(t)": sol[:,1]})
         
         st.success("✅ تمت المحاكاة بنجاح")
