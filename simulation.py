@@ -25,19 +25,25 @@ def generate_pdf(user_name, params, results_df):
 
 def simulation_page():
     st.title("🔬 محرك المحاكاة")
-    
     user = st.session_state.user
     
-    with st.sidebar:
-        st.header("المعاملات")
+    st.markdown("### ⚙️ إعدادات المعاملات")
+    
+    # تقسيم الشاشة إلى عمودين لتسهيل العرض على الجوال
+    col1, col2 = st.columns(2)
+    
+    with col1:
         r = st.slider("r (معدل النمو)", 0.1, 5.0, 1.0)
         beta = st.slider("beta (التخميد)", 0.01, 1.0, 0.1)
         gamma = st.slider("gamma (الاقتران)", 0.0, 2.0, 0.5)
+        
+    with col2:
         eta = st.slider("eta", 0.1, 2.0, 1.0)
         mu = st.slider("mu", 0.0, 1.0, 0.1)
         tau = st.slider("tau (الاسترخاء)", 0.1, 5.0, 1.0)
         
-        run = st.button("🚀 تشغيل المحاكاة", use_container_width=True)
+    st.divider()
+    run = st.button("🚀 تشغيل المحاكاة", use_container_width=True, type="primary")
 
     if run:
         def model(y, t):
@@ -54,10 +60,18 @@ def simulation_page():
         st.success("✅ تمت المحاكاة بنجاح")
         st.line_chart(df.set_index("Time"))
         
-        auth_db.increment_simulation(user['email'])
+        try:
+            auth_db.increment_simulation(user['email'])
+        except:
+            pass
         
         if user['plan'] != 'individual':
             pdf_bytes = generate_pdf(user['name'], {"r":r, "beta":beta}, df)
-            st.download_button("📄 تحميل التقرير (PDF)", data=pdf_bytes, file_name="report.pdf", mime="application/pdf")
+            st.download_button(
+                "📄 تحميل التقرير (PDF)", 
+                data=pdf_bytes, 
+                file_name="hydromem_report.pdf", 
+                mime="application/pdf"
+            )
         else:
             st.info("🔒 تصدير PDF متاح في باقة الباحث وما فوق.")
