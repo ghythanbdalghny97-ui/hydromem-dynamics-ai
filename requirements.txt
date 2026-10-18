@@ -1,68 +1,38 @@
-# ============================================================
+# ==========================================
 # HYDROMEM Dynamics AI
-# Python Dependencies
-# Version v16.0
-# ============================================================
+# Requirements
+# ==========================================
 
-
-# واجهة التطبيق
+# Core Framework
 streamlit>=1.32.0
 
-
-
-# قاعدة البيانات والمصادقة
+# Database
 supabase>=2.0.0
 
-
-
-# مكونات Streamlit الإضافية
+# Authentication / UI Components
 extra-streamlit-components>=0.1.71
 
-
-
-# الحسابات والمحاكاة الرياضية
+# Scientific Computing
 numpy>=1.26.0
 scipy>=1.11.0
+pandas>=2.2.0
+matplotlib>=3.8.0
 
-
-
-# تحليل البيانات
-pandas>=2.0.0
-openpyxl>=3.1.0
-
-
-
-# إنشاء ملفات PDF
-fpdf2>=2.7.0
-
-
-
-# الذكاء الاصطناعي
-groq>=0.11.0
-google-genai>=0.3.0
-
-
-
-# الصور
+# File Processing
+pypdf>=5.0.0
+python-docx>=1.1.2
+openpyxl>=3.1.2
 Pillow>=10.0.0
 
+# PDF Reports
+fpdf2>=2.7.0
 
+# Artificial Intelligence APIs
+groq>=0.11.0
+google-genai>=1.0.0
 
-# قراءة الملفات
-pypdf>=4.0.0
-python-docx>=1.1.0
-
-
-
-# التاريخ والوقت
+# Date and Time Utilities
 python-dateutil>=2.8.2
 
-
-
-# أمان كلمات المرور والتوكن
-bcrypt>=4.0.0
-
-
-
-# تحميل المتغيرات السرية
-python-dotenv>=1.0.0
+# Security / Environment Support
+python-dotenv>=1.0.1
