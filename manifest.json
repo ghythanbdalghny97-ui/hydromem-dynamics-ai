@@ -1,26 +1,60 @@
 {
   "name": "HYDROMEM Dynamics AI",
   "short_name": "HYDROMEM",
-  "description": "Computational Intelligence Platform for Complex Dynamic Systems",
+  "description": "AI-powered computational platform for mathematical modeling, dynamic simulation, and scientific research.",
+  "version": "16.0.0",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#667eea",
   "orientation": "portrait",
-  "lang": "ar",
-  "dir": "rtl",
+  "background_color": "#ffffff",
+  "theme_color": "#1565C0",
+  "categories": [
+    "science",
+    "education",
+    "research",
+    "artificial-intelligence",
+    "simulation"
+  ],
   "icons": [
     {
-      "src": "https://dummyimage.com/192x192/667eea/ffffff.png&text=H",
+      "src": "icon-192.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
-      "src": "https://dummyimage.com/512x512/667eea/ffffff.png&text=H",
+      "src": "icon-512.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
+  ],
+  "author": {
+    "name": "Abdul Ghani Saleh Mohsen Mohamed Ghaithan",
+    "email": "ghythanbdalghny97@gmail.com",
+    "phone": "+967779193805",
+    "country": "Yemen"
+  },
+  "copyright": "Copyright © 2026 Abdul Ghani Saleh Mohsen Mohamed Ghaithan. All Rights Reserved.",
+  "license": "Custom Research License v1.0",
+  "homepage": "https://i.z28y4zma.streamlit.app",
+  "repository": "https://github.com/ghythanbdalghny97-ui/hydromem-dynamics-ai",
+  "research_status": "Research Prototype (Computational Stage)",
+  "experimental_validation": false,
+  "features": [
+    "HYDROMEM Chat AI",
+    "Dynamic Simulation",
+    "Mathematical Modeling",
+    "Scientific AI Assistant",
+    "PDF Analysis",
+    "Word Analysis",
+    "Excel Analysis",
+    "CSV Analysis",
+    "Image Analysis",
+    "Multi-model AI",
+    "Research Workspace",
+    "User Accounts",
+    "Subscription System"
   ]
 }
