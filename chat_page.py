@@ -34,14 +34,17 @@ PERSONAS = {
 # 2. دوال المساعدة
 # ==========================================
 def fix_latex(text):
-    """إصلاح أخطاء المعادلات الرياضية لمنع النصوص الحمراء"""
+    """إصلاح أخطاء المعادلات الرياضية لمنع الأخطاء البرمجية والنصوص الحمراء"""
     text = text.replace(r"\$$4pt]", r"\\[4pt]").replace(r"\$$6pt]", r"\\[6pt]")
     text = text.replace(r"\[", "$$").replace(r"\]", "$$")
     text = text.replace(r"\end{cases}", "").replace(r"\begin{cases}", "")
     text = text.replace(r"\bigr]", "").replace(r"\bigl[", "")
+    
     greek_letters = [r"\Theta", r"\eta", r"\beta", r"\gamma", r"\mu", r"\tau", r"\alpha", r"\lambda"]
     for letter in greek_letters:
-        text = re.sub(r'(?<!\$)' + re.escape(letter) + r'(?!\$)', f'${letter}$', text)
+        # 🌟 استخدام lambda لمنع خطأ bad escape \T
+        text = re.sub(r'(?<!\$)' + re.escape(letter) + r'(?!\$)', lambda match: f'${letter}$', text)
+        
     return text
 
 def extract_text_from_file(uploaded_file):
