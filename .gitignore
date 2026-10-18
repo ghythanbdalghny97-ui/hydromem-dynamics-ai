@@ -1,0 +1,73 @@
+# ============================================================
+# HYDROMEM Dynamics AI
+# Git Ignore
+# ============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# Environment variables
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Logs
+*.log
+
+# SQLite
+*.sqlite
+*.sqlite3
+*.db
+
+# Temporary files
+*.tmp
+*.bak
+
+# Python cache
+.pytest_cache/
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Distribution
+build/
+dist/
+*.egg-info/
+
+# Uploaded files
+uploads/
+temp/
+
+# Coverage
+.coverage
+htmlcov/
+
+# PDF exports
+generated_reports/
+
+# Secrets
+secrets.json
+credentials.json
+service_account.json
