@@ -1,348 +1,432 @@
 """
 HYDROMEM Dynamics AI
-Simulation Engine
+Supabase Database Utilities
 
-Dynamic Model:
-dA/dt = rA - beta A^3 - gamma A Theta
-
-dTheta/dt =
-(1/tau)(eta A^2(1+mu Theta)-Theta)
-
+Responsible for:
+- Users database
+- Authentication support
+- Remember token
+- Chat history
+- Payments
+- Teams
 """
 
-import numpy as np
 import streamlit as st
+from datetime import datetime
 
-from scipy.integrate import solve_ivp
-import matplotlib.pyplot as plt
+
+# ============================================================
+# اتصال Supabase
+# ============================================================
+
+try:
+    from supabase import create_client, Client
+
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+
+    supabase: Client = create_client(url, key)
+
+except Exception as e:
+    supabase = None
+    print("Supabase connection error:", e)
 
 
 
 # ============================================================
-# النموذج الرياضي
+# المستخدمون
 # ============================================================
 
-def hydromem_model(
-        t,
-        y,
-        r,
-        beta,
-        gamma,
-        eta,
-        tau,
-        mu
+def get_user_by_email(email):
+
+    if not supabase:
+        return None
+
+    try:
+        result = (
+            supabase
+            .table("users")
+            .select("*")
+            .eq("email", email.lower())
+            .execute()
+        )
+
+        if result.data:
+            return result.data[0]
+
+    except Exception as e:
+        print(e)
+
+    return None
+
+
+
+def create_user(user):
+
+    if not supabase:
+        return False
+
+    try:
+
+        supabase.table("users").insert(
+            user
+        ).execute()
+
+        return True
+
+    except Exception as e:
+        print(e)
+
+    return False
+
+
+
+# ============================================================
+# تسجيل الدخول التلقائي
+# ============================================================
+
+def update_user_token(email, token, expiry):
+
+    if not supabase:
+        return False
+
+    try:
+
+        supabase.table("users").update(
+            {
+                "remember_token": token,
+                "token_expiry": expiry
+            }
+        ).eq(
+            "email",
+            email.lower()
+        ).execute()
+
+        return True
+
+    except Exception as e:
+        print(e)
+
+    return False
+
+
+
+def get_user_by_token(token):
+
+    if not supabase:
+        return None
+
+    try:
+
+        result = (
+            supabase.table("users")
+            .select("*")
+            .eq("remember_token", token)
+            .execute()
+        )
+
+        if result.data:
+            return result.data[0]
+
+    except Exception as e:
+        print(e)
+
+    return None
+
+
+
+def clear_user_token(email):
+
+    if not supabase:
+        return False
+
+    try:
+
+        supabase.table("users").update(
+            {
+                "remember_token": None,
+                "token_expiry": None
+            }
+        ).eq(
+            "email",
+            email.lower()
+        ).execute()
+
+        return True
+
+    except Exception as e:
+        print(e)
+
+    return False
+
+
+
+# ============================================================
+# المحادثات
+# ============================================================
+
+def save_chat_session(
+        email,
+        title,
+        messages,
+        session_id=None
 ):
 
-    A, Theta = y
+    if not supabase:
+        return None
+
+    try:
+
+        data = {
+            "user_email": email,
+            "title": title,
+            "messages": messages,
+            "updated_at": datetime.utcnow().isoformat()
+        }
 
 
-    dA = (
-        r*A
-        -
-        beta*A**3
-        -
-        gamma*A*Theta
-    )
+        if session_id:
+
+            supabase.table(
+                "chat_sessions"
+            ).update(
+                data
+            ).eq(
+                "id",
+                session_id
+            ).execute()
+
+            return session_id
 
 
-    dTheta = (
-        1/tau
-    ) * (
-        eta*A**2*(1+mu*Theta)
-        -
-        Theta
-    )
+        result = (
+            supabase.table(
+                "chat_sessions"
+            )
+            .insert(data)
+            .execute()
+        )
+
+        if result.data:
+            return result.data[0]["id"]
+
+    except Exception as e:
+        print(e)
+
+    return None
 
 
-    return [
-        dA,
-        dTheta
-    ]
+
+def get_chat_sessions(email, limit=10):
+
+    if not supabase:
+        return []
+
+    try:
+
+        result = (
+            supabase.table(
+                "chat_sessions"
+            )
+            .select("*")
+            .eq(
+                "user_email",
+                email
+            )
+            .order(
+                "updated_at",
+                desc=True
+            )
+            .limit(limit)
+            .execute()
+        )
+
+        return result.data or []
+
+    except Exception as e:
+        print(e)
+
+    return []
+
+
+
+def get_chat_session_by_id(session_id):
+
+    if not supabase:
+        return None
+
+    try:
+
+        result = (
+            supabase.table(
+                "chat_sessions"
+            )
+            .select("*")
+            .eq(
+                "id",
+                session_id
+            )
+            .execute()
+        )
+
+        if result.data:
+            return result.data[0]
+
+    except Exception as e:
+        print(e)
+
+    return None
+
+
+
+def delete_chat_session(session_id):
+
+    if not supabase:
+        return False
+
+    try:
+
+        supabase.table(
+            "chat_sessions"
+        ).delete().eq(
+            "id",
+            session_id
+        ).execute()
+
+        return True
+
+    except Exception:
+        return False
 
 
 
 # ============================================================
-# صفحة المحاكاة
+# الفرق
 # ============================================================
 
-def simulation_page():
+def get_team_members(team_id):
 
-    st.title(
-        "🔬 HYDROMEM Dynamic Simulation"
-    )
+    if not supabase:
+        return []
 
+    try:
 
-    st.info(
-        """
-        نموذج ديناميكي تجريبي لدراسة
-        التفاعل بين المتغير البنيوي A
-        ومتغير الذاكرة الحرارية/المادية Θ.
-        
-        النموذج مرحلة محاكاة حاسوبية.
-        لا يمثل تحققاً تجريبياً.
-        """
-    )
-
-
-
-    # --------------------------------------------------------
-    # المعاملات
-    # --------------------------------------------------------
-
-    st.sidebar.header(
-        "⚙️ معاملات النموذج"
-    )
-
-
-    r = st.sidebar.slider(
-        "r",
-        -2.0,
-        3.0,
-        1.0,
-        0.1
-    )
-
-
-    beta = st.sidebar.slider(
-        "β",
-        0.1,
-        3.0,
-        1.0,
-        0.1
-    )
-
-
-    gamma = st.sidebar.slider(
-        "γ",
-        0.0,
-        3.0,
-        0.5,
-        0.1
-    )
-
-
-    eta = st.sidebar.slider(
-        "η",
-        0.1,
-        3.0,
-        0.8,
-        0.1
-    )
-
-
-    tau = st.sidebar.slider(
-        "τ",
-        0.1,
-        10.0,
-        1.0,
-        0.1
-    )
-
-
-    mu = st.sidebar.slider(
-        "μ",
-        -2.0,
-        3.0,
-        0.5,
-        0.1
-    )
-
-
-
-    # --------------------------------------------------------
-    # الزمن والبداية
-    # --------------------------------------------------------
-
-    t_end = st.slider(
-        "مدة المحاكاة",
-        10,
-        200,
-        100
-    )
-
-
-    A0 = st.number_input(
-        "القيمة الابتدائية A",
-        value=0.5
-    )
-
-
-    Theta0 = st.number_input(
-        "القيمة الابتدائية Θ",
-        value=0.2
-    )
-
-
-
-    if st.button(
-        "▶️ تشغيل المحاكاة",
-        use_container_width=True
-    ):
-
-
-        t = np.linspace(
-            0,
-            t_end,
-            1000
-        )
-
-
-        result = solve_ivp(
-            hydromem_model,
-            [
-                0,
-                t_end
-            ],
-            [
-                A0,
-                Theta0
-            ],
-            args=(
-                r,
-                beta,
-                gamma,
-                eta,
-                tau,
-                mu
-            ),
-            t_eval=t
-        )
-
-
-        A = result.y[0]
-
-        Theta = result.y[1]
-
-
-
-        # ----------------------------------------------------
-        # النتائج
-        # ----------------------------------------------------
-
-        col1,col2 = st.columns(2)
-
-
-        with col1:
-
-            st.metric(
-                "A النهائي",
-                f"{A[-1]:.6f}"
+        result = (
+            supabase.table("users")
+            .select("*")
+            .eq(
+                "team_id",
+                team_id
             )
+            .execute()
+        )
+
+        return result.data or []
+
+    except Exception:
+        return []
 
 
-        with col2:
 
-            st.metric(
-                "Θ النهائي",
-                f"{Theta[-1]:.6f}"
+def get_team_by_owner(email):
+
+    user = get_user_by_email(email)
+
+    if not user:
+        return []
+
+    return get_team_members(
+        user.get("team_id") or user.get("id")
+    )
+
+
+
+# ============================================================
+# الدفع والاشتراكات
+# ============================================================
+
+def create_payment_request(data):
+
+    if not supabase:
+        return False
+
+    try:
+
+        supabase.table(
+            "payments"
+        ).insert(
+            data
+        ).execute()
+
+        return True
+
+    except Exception as e:
+        print(e)
+
+    return False
+
+
+
+def get_pending_payments():
+
+    if not supabase:
+        return []
+
+    try:
+
+        result = (
+            supabase.table(
+                "payments"
             )
-
-
-
-        # ----------------------------------------------------
-        # الرسم A
-        # ----------------------------------------------------
-
-        st.subheader(
-            "تطور A"
+            .select("*")
+            .eq(
+                "status",
+                "pending"
+            )
+            .execute()
         )
 
-        fig1, ax1 = plt.subplots()
+        return result.data or []
 
-        ax1.plot(
-            t,
-            A
-        )
-
-        ax1.set_xlabel(
-            "Time"
-        )
-
-        ax1.set_ylabel(
-            "A"
-        )
-
-        ax1.grid(
-            True
-        )
-
-        st.pyplot(
-            fig1
-        )
+    except Exception:
+        return []
 
 
 
-        # ----------------------------------------------------
-        # الرسم Theta
-        # ----------------------------------------------------
+def approve_payment(payment_id, email, plan):
 
-        st.subheader(
-            "تطور Θ"
-        )
+    if not supabase:
+        return False
 
-        fig2, ax2 = plt.subplots()
+    try:
 
-        ax2.plot(
-            t,
-            Theta
-        )
-
-        ax2.set_xlabel(
-            "Time"
-        )
-
-        ax2.set_ylabel(
-            "Theta"
-        )
-
-        ax2.grid(
-            True
-        )
-
-        st.pyplot(
-            fig2
-        )
+        supabase.table(
+            "payments"
+        ).update(
+            {
+                "status": "approved"
+            }
+        ).eq(
+            "id",
+            payment_id
+        ).execute()
 
 
-
-        # ----------------------------------------------------
-        # مسار الطور
-        # ----------------------------------------------------
-
-        st.subheader(
-            "Phase Space"
-        )
-
-
-        fig3, ax3 = plt.subplots()
-
-
-        ax3.plot(
-            A,
-            Theta
-        )
+        supabase.table(
+            "users"
+        ).update(
+            {
+                "plan": plan
+            }
+        ).eq(
+            "email",
+            email
+        ).execute()
 
 
-        ax3.set_xlabel(
-            "A"
-        )
+        return True
 
-        ax3.set_ylabel(
-            "Theta"
-        )
+    except Exception as e:
+        print(e)
 
-
-        ax3.grid(
-            True
-        )
-
-
-        st.pyplot(
-            fig3
-        )
-
-
-
-        st.success(
-            "اكتملت المحاكاة بنجاح"
-        )
+    return False
