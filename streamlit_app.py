@@ -1,95 +1,129 @@
-# ============================================================
-# HYDROMEM Dynamics AI v15.6
-# Main Application Router
-# ============================================================
+"""
+HYDROMEM Dynamics AI
+Main Application
+
+Version: v16.0
+"""
 
 import streamlit as st
-from datetime import datetime
 
-from database import auth_db
-from config import PLANS, ACCOUNT_TYPES
+import auth_db
+import config
 
 
-# ------------------------------------------------------------
+
+# ============================================================
 # إعداد الصفحة
-# ------------------------------------------------------------
+# ============================================================
 
 st.set_page_config(
-    page_title="HYDROMEM Dynamics AI",
+    page_title=config.APP_NAME,
     page_icon="🧬",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 
-# ------------------------------------------------------------
+
+# ============================================================
 # Session State
-# ------------------------------------------------------------
+# ============================================================
 
 if "logged_in" not in st.session_state:
+
     st.session_state.logged_in = False
 
+
 if "user" not in st.session_state:
+
     st.session_state.user = None
 
+
 if "admin_verified" not in st.session_state:
+
     st.session_state.admin_verified = False
 
 
-# ------------------------------------------------------------
-# التحقق من انتهاء الاشتراك
-# ------------------------------------------------------------
 
-def check_subscription(user):
+# ============================================================
+# تسجيل الدخول التلقائي
+# ============================================================
 
-    expiry = user.get("expiry_date")
+def auto_login():
 
-    if not expiry:
-        return True
+    if st.session_state.logged_in:
 
-    try:
-        expiry_date = datetime.fromisoformat(expiry)
-
-        if expiry_date < datetime.now():
-            st.warning(
-                "⚠️ انتهى الاشتراك. يرجى ترقية الحساب."
-            )
-            return False
-
-    except Exception:
-        pass
-
-    return True
+        return
 
 
-# ------------------------------------------------------------
-# تسجيل الدخول
-# ------------------------------------------------------------
-
-def login_page():
-
-    st.title("🧬 HYDROMEM Dynamics AI")
-
-    tab_login, tab_register = st.tabs(
-        ["🔐 دخول", "📝 إنشاء حساب"]
+    token = st.query_params.get(
+        "token"
     )
 
 
-    with tab_login:
+    if token:
 
-        with st.form("login_form"):
+        user = auth_db.login_with_token(
+            token
+        )
+
+
+        if user:
+
+            st.session_state.logged_in = True
+
+            st.session_state.user = user
+
+            st.rerun()
+
+
+
+# ============================================================
+# صفحة الدخول
+# ============================================================
+
+def login_page():
+
+
+    st.title(
+        "🧬 HYDROMEM Dynamics AI"
+    )
+
+
+    st.write(
+        config.APP_DESCRIPTION
+    )
+
+
+    tab1, tab2 = st.tabs(
+        [
+            "🔐 دخول",
+            "📝 تسجيل جديد"
+        ]
+    )
+
+
+    with tab1:
+
+
+        with st.form(
+            "login_form"
+        ):
+
 
             email = st.text_input(
                 "البريد الإلكتروني"
             )
+
 
             password = st.text_input(
                 "كلمة المرور",
                 type="password"
             )
 
+
             remember = st.checkbox(
-                "تذكرني"
+                "تذكرني (دخول تلقائي)",
+                value=True
             )
 
 
@@ -99,7 +133,9 @@ def login_page():
             )
 
 
+
             if submit:
+
 
                 user = auth_db.login_user_db(
                     email,
@@ -109,18 +145,30 @@ def login_page():
 
                 if user:
 
-                    st.session_state.logged_in = True
-                    st.session_state.user = user
+
+                    st.session_state.logged_in=True
+
+                    st.session_state.user=user
+
 
 
                     if remember:
 
-                        token = auth_db.generate_remember_token(
-                            email
+
+                        token = (
+                            auth_db
+                            .generate_remember_token(
+                                email
+                            )
                         )
 
+
                         if token:
-                            st.query_params["token"] = token
+
+                            st.query_params[
+                                "token"
+                            ] = token
+
 
 
                     st.rerun()
@@ -134,32 +182,40 @@ def login_page():
 
 
 
-    with tab_register:
+    with tab2:
 
-        with st.form("register_form"):
+
+        with st.form(
+            "register_form"
+        ):
+
 
             name = st.text_input(
                 "الاسم"
             )
 
+
             email = st.text_input(
-                "البريد الإلكتروني"
+                "البريد"
             )
+
 
             password = st.text_input(
                 "كلمة المرور",
                 type="password"
             )
 
-            account_type = st.selectbox(
-                "نوع الحساب",
-                options=list(ACCOUNT_TYPES.keys()),
-                format_func=lambda x:
-                ACCOUNT_TYPES[x]
-            )
 
-            organization = st.text_input(
-                "المؤسسة"
+            account = st.selectbox(
+                "نوع الحساب",
+                [
+                    "individual",
+                    "researcher",
+                    "laboratory",
+                    "university",
+                    "hospital",
+                    "enterprise"
+                ]
             )
 
 
@@ -171,20 +227,25 @@ def login_page():
 
             if submit:
 
-                if len(password) < 8:
+
+                if len(password)<8:
 
                     st.error(
                         "كلمة المرور يجب أن تكون 8 أحرف على الأقل"
                     )
 
+
                 else:
 
-                    ok, msg = auth_db.register_user_db(
-                        email,
-                        password,
-                        name,
-                        account_type,
-                        organization
+                    ok,msg = (
+                        auth_db
+                        .register_user_db(
+                            email,
+                            password,
+                            name,
+                            account,
+                            ""
+                        )
                     )
 
 
@@ -201,150 +262,81 @@ def login_page():
                         )
 
 
-# ------------------------------------------------------------
+
+# ============================================================
 # الصفحة الرئيسية
-# ------------------------------------------------------------
+# ============================================================
 
 def home_page(user):
 
-    st.title("🏠 HYDROMEM Dynamics AI")
+
+    st.title(
+        "🏠 HYDROMEM Dashboard"
+    )
+
 
     st.success(
         f"مرحباً {user.get('name','')}"
     )
 
 
-    plan = user.get(
-        "plan",
-        "individual"
-    )
+    col1,col2,col3 = st.columns(3)
 
 
-    st.metric(
-        "الباقة الحالية",
-        PLANS[plan]["name_ar"]
-    )
+    with col1:
+
+        st.metric(
+            "الحساب",
+            user.get(
+                "account_type",
+                "-"
+            )
+        )
+
+
+    with col2:
+
+        st.metric(
+            "الخطة",
+            user.get(
+                "plan",
+                "Free"
+            )
+        )
+
+
+    with col3:
+
+        st.metric(
+            "الإصدار",
+            config.APP_VERSION
+        )
+
 
 
     st.info(
-        "منصة محاكاة حاسوبية للأنظمة المعقدة"
+        """
+        استخدم القائمة الجانبية للوصول إلى:
+        
+        💬 HYDROMEM Chat
+        
+        🔬 المحاكاة الديناميكية
+        
+        💳 الاشتراكات
+        
+        """
     )
 
 
 
-# ------------------------------------------------------------
-# القائمة الجانبية
-# ------------------------------------------------------------
-
-def sidebar(user):
-
-    with st.sidebar:
-
-        st.title(
-            "🧬 HYDROMEM"
-        )
-
-
-        plan = user.get(
-            "plan",
-            "individual"
-        )
-
-
-        st.info(
-            PLANS[plan]["name_ar"]
-        )
-
-
-        if st.button(
-            "🚪 تسجيل الخروج"
-        ):
-
-            st.session_state.logged_in = False
-            st.session_state.user = None
-
-            if "token" in st.query_params:
-                del st.query_params["token"]
-
-            st.rerun()
-
-
-
-        menu = st.radio(
-            "القائمة",
-            [
-                "🏠 الرئيسية",
-                "💬 HYDROMEM Chat",
-                "🔬 المحاكاة",
-                "🧬 النماذج الحيوية",
-                "📁 الملفات",
-                "💳 الاشتراك"
-            ]
-        )
-
-
-        return menu
-
-
-
-# ------------------------------------------------------------
-# تشغيل الصفحات
-# ------------------------------------------------------------
-
-def router(page,user):
-
-
-    if page == "🏠 الرئيسية":
-
-        home_page(user)
-
-
-
-    elif page == "💬 HYDROMEM Chat":
-
-        from pages.chat_page import chat_page
-
-        chat_page()
-
-
-
-    elif page == "🔬 المحاكاة":
-
-        from pages.simulation import simulation_page
-
-        simulation_page()
-
-
-
-    elif page == "🧬 النماذج الحيوية":
-
-        from pages.biological_models import biological_page
-
-        biological_page()
-
-
-
-    elif page == "📁 الملفات":
-
-        from pages.files import files_page
-
-        files_page()
-
-
-
-    elif page == "💳 الاشتراك":
-
-        from pages.payment import payment_page
-
-        payment_page()
-
-
-
-# ------------------------------------------------------------
-# Main
-# ------------------------------------------------------------
+# ============================================================
+# التطبيق الرئيسي
+# ============================================================
 
 def main():
+
+
+    auto_login()
 
 
     if not st.session_state.logged_in:
@@ -358,22 +350,85 @@ def main():
     user = st.session_state.user
 
 
-    if not check_subscription(user):
 
-        return
-
+    with st.sidebar:
 
 
-    page = sidebar(user)
+        st.title(
+            "🧬 HYDROMEM"
+        )
 
 
-    router(
-        page,
-        user
-    )
+        st.write(
+            user.get(
+                "email"
+            )
+        )
+
+
+        page = st.radio(
+
+            "القائمة",
+
+            [
+
+                "🏠 الرئيسية",
+
+                "💬 HYDROMEM Chat",
+
+                "🔬 المحاكاة"
+
+            ]
+
+        )
 
 
 
-if __name__ == "__main__":
+        st.divider()
+
+
+        if st.button(
+            "🚪 تسجيل الخروج"
+        ):
+
+
+            st.session_state.logged_in=False
+
+            st.session_state.user=None
+
+
+            if "token" in st.query_params:
+
+                del st.query_params["token"]
+
+
+            st.rerun()
+
+
+
+    if page=="🏠 الرئيسية":
+
+        home_page(user)
+
+
+
+    elif page=="💬 HYDROMEM Chat":
+
+        from chat_page import chat_page
+
+        chat_page()
+
+
+
+    elif page=="🔬 المحاكاة":
+
+        from simulation import simulation_page
+
+        simulation_page()
+
+
+
+
+if __name__=="__main__":
 
     main()
