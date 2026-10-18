@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 
 def chat_page():
     st.title("💬 HYDROMEM Chat AI")
@@ -11,31 +12,26 @@ def chat_page():
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # عرض الرسائل السابقة
     for msg in st.session_state.messages:
         if msg["role"] == "user":
             st.info(f"🧑‍🔬 أنت: {msg['content']}")
         else:
             st.success(f"🤖 HYDROMEM: {msg['content']}")
 
-    # مربع الإدخال
     prompt = st.text_input("اكتب سؤالك هنا واضغط Enter:")
     
     if prompt:
-        # إضافة سؤال المستخدم
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.info(f"🧑‍🔬 أنت: {prompt}")
         
-        # جلب الرد من الذكاء الاصطناعي مع تجربة النماذج المتاحة تلقائياً
         try:
             from groq import Groq
             client = Groq(api_key=groq_key)
             
-            # قائمة النماذج النشطة حالياً في Groq
             models_to_try = [
-                "openai/gpt-oss-20b",
                 "openai/gpt-oss-120b",
-                "qwen/qwen3.6-27b"
+                "openai/gpt-oss-20b",
+                "qwen/qwen3.8-27b"
             ]
             
             response = None
@@ -48,16 +44,16 @@ def chat_page():
                         messages=[{"role": "user", "content": prompt}]
                     )
                     response = completion.choices[0].message.content
-                    break # إذا نجح النموذج، توقف عن التجربة
+                    break 
                 except Exception as e:
                     last_error = str(e)
-                    continue
+                    time.sleep(1) 
                     
             if response:
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 st.success(f"🤖 HYDROMEM: {response}")
             else:
-                st.error(f"عذراً، فشلت جميع النماذج. آخر خطأ: {last_error}")
+                st.error(f"عذراً، فشلت جميع النماذج. الخطأ الأخير: {last_error}")
                 
         except Exception as e:
             st.error(f"حدث خطأ غير متوقع: {e}")
