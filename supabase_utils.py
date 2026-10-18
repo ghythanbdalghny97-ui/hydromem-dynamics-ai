@@ -1,548 +1,348 @@
 """
 HYDROMEM Dynamics AI
-Supabase Database Utilities
+Simulation Engine
 
-Database operations:
-- Users
-- Chat history
-- Payments
-- Subscriptions
+Dynamic Model:
+dA/dt = rA - beta A^3 - gamma A Theta
+
+dTheta/dt =
+(1/tau)(eta A^2(1+mu Theta)-Theta)
+
 """
 
-from datetime import datetime
+import numpy as np
+import streamlit as st
 
-from supabase import create_client, Client
-
-import config
-
-
-# ============================================================
-# إنشاء اتصال Supabase
-# ============================================================
-
-_supabase = None
-
-
-def get_client():
-
-    global _supabase
-
-    if _supabase is None:
-
-        if not config.SUPABASE_URL or not config.SUPABASE_KEY:
-            return None
-
-        _supabase = create_client(
-            config.SUPABASE_URL,
-            config.SUPABASE_KEY
-        )
-
-    return _supabase
+from scipy.integrate import solve_ivp
+import matplotlib.pyplot as plt
 
 
 
 # ============================================================
-# USERS
+# النموذج الرياضي
 # ============================================================
 
-
-def create_user(user):
-
-    client = get_client()
-
-    if not client:
-        return False
-
-
-    try:
-
-        result = (
-            client
-            .table("users")
-            .insert(user)
-            .execute()
-        )
-
-        return bool(result.data)
-
-    except Exception as e:
-
-        print("Create user error:", e)
-
-        return False
-
-
-
-def get_user_by_email(email):
-
-    client = get_client()
-
-    if not client:
-        return None
-
-
-    try:
-
-        result = (
-            client
-            .table("users")
-            .select("*")
-            .eq(
-                "email",
-                email.lower()
-            )
-            .single()
-            .execute()
-        )
-
-        return result.data
-
-
-    except Exception:
-
-        return None
-
-
-
-def update_user_token(
-        email,
-        token,
-        expiry
+def hydromem_model(
+        t,
+        y,
+        r,
+        beta,
+        gamma,
+        eta,
+        tau,
+        mu
 ):
 
-    client = get_client()
-
-    if not client:
-        return False
-
-
-    try:
-
-        result = (
-            client
-            .table("users")
-            .update(
-                {
-                    "remember_token": token,
-                    "token_expiry": expiry
-                }
-            )
-            .eq(
-                "email",
-                email
-            )
-            .execute()
-        )
-
-
-        return bool(result.data)
-
-
-    except Exception:
-
-        return False
-
-
-
-def get_user_by_token(token):
-
-    client = get_client()
-
-    if not client:
-        return None
-
-
-    try:
-
-        result = (
-            client
-            .table("users")
-            .select("*")
-            .eq(
-                "remember_token",
-                token
-            )
-            .single()
-            .execute()
-        )
-
-        return result.data
-
-
-    except Exception:
-
-        return None
-
-
-
-def clear_user_token(email):
-
-    client = get_client()
-
-    if not client:
-        return False
-
-
-    try:
-
-        (
-            client
-            .table("users")
-            .update(
-                {
-                    "remember_token": None,
-                    "token_expiry": None
-                }
-            )
-            .eq(
-                "email",
-                email
-            )
-            .execute()
-        )
-
-        return True
-
-
-    except Exception:
-
-        return False
-
-
-
-# ============================================================
-# CHAT HISTORY
-# ============================================================
-
-
-def save_chat_session(
-        email,
-        title,
-        messages,
-        session_id=None
-):
-
-    client = get_client()
-
-    if not client:
-        return None
-
-
-    try:
-
-        data = {
-
-            "user_email": email,
-
-            "title": title,
-
-            "messages": messages,
-
-            "updated_at":
-                datetime.utcnow().isoformat()
-
-        }
-
-
-        if session_id:
-
-            result = (
-                client
-                .table("chat_sessions")
-                .update(data)
-                .eq(
-                    "id",
-                    session_id
-                )
-                .execute()
-            )
-
-            return session_id
-
-
-        else:
-
-            result = (
-                client
-                .table("chat_sessions")
-                .insert(data)
-                .execute()
-            )
-
-
-            if result.data:
-
-                return result.data[0]["id"]
-
-
-    except Exception as e:
-
-        print("Save chat error:", e)
-
-
-    return None
-
-
-
-def get_chat_sessions(
-        email,
-        limit=10
-):
-
-    client = get_client()
-
-    if not client:
-        return []
-
-
-    try:
-
-        result = (
-
-            client
-            .table("chat_sessions")
-            .select("*")
-            .eq(
-                "user_email",
-                email
-            )
-            .order(
-                "updated_at",
-                desc=True
-            )
-            .limit(limit)
-            .execute()
-
-        )
-
-        return result.data or []
-
-
-    except Exception:
-
-        return []
-
-
-
-def get_chat_session_by_id(
-        session_id
-):
-
-    client = get_client()
-
-    if not client:
-        return None
-
-
-    try:
-
-        result = (
-
-            client
-            .table("chat_sessions")
-            .select("*")
-            .eq(
-                "id",
-                session_id
-            )
-            .single()
-            .execute()
-
-        )
-
-        return result.data
-
-
-    except Exception:
-
-        return None
-
-
-
-def delete_chat_session(
-        session_id
-):
-
-    client = get_client()
-
-    if not client:
-        return False
-
-
-    try:
-
-        (
-            client
-            .table("chat_sessions")
-            .delete()
-            .eq(
-                "id",
-                session_id
-            )
-            .execute()
-        )
-
-        return True
-
-
-    except Exception:
-
-        return False
-
-
-
-# ============================================================
-# PAYMENTS
-# ============================================================
-
-
-def create_payment_request(data):
-
-    client = get_client()
-
-    if not client:
-        return False
-
-
-    try:
-
-        result = (
-            client
-            .table("payments")
-            .insert(data)
-            .execute()
-        )
-
-        return bool(result.data)
-
-
-    except Exception:
-
-        return False
-
-
-
-def get_pending_payments():
-
-    client = get_client()
-
-    if not client:
-        return []
-
-
-    try:
-
-        result = (
-
-            client
-            .table("payments")
-            .select("*")
-            .eq(
-                "status",
-                "pending"
-            )
-            .execute()
-
-        )
-
-        return result.data or []
-
-
-    except Exception:
-
-        return []
-
-
-
-def approve_payment(
-        payment_id,
-        email,
-        plan
-):
-
-    client = get_client()
-
-    if not client:
-        return False
-
-
-    try:
-
-        client.table("payments").update(
-            {
-                "status": "approved"
-            }
-        ).eq(
-            "id",
-            payment_id
-        ).execute()
-
-
-        client.table("users").update(
-            {
-                "plan": plan
-            }
-        ).eq(
-            "email",
-            email
-        ).execute()
-
-
-        return True
-
-
-    except Exception:
-
-        return False
-
-
-
-# ============================================================
-# TEAM
-# ============================================================
-
-
-def get_team_members(team_id):
-
-    client = get_client()
-
-    if not client:
-        return []
-
-
-    try:
-
-        result = (
-
-            client
-            .table("users")
-            .select(
-                "name,email,account_type"
-            )
-            .eq(
-                "team_id",
-                team_id
-            )
-            .execute()
-
-        )
-
-        return result.data or []
-
-
-    except Exception:
-
-        return []
-
-
-
-def get_team_by_owner(email):
-
-    user = get_user_by_email(email)
-
-    if not user:
-        return []
-
-    return get_team_members(
-        user.get("team_id") or user.get("id")
+    A, Theta = y
+
+
+    dA = (
+        r*A
+        -
+        beta*A**3
+        -
+        gamma*A*Theta
     )
+
+
+    dTheta = (
+        1/tau
+    ) * (
+        eta*A**2*(1+mu*Theta)
+        -
+        Theta
+    )
+
+
+    return [
+        dA,
+        dTheta
+    ]
+
+
+
+# ============================================================
+# صفحة المحاكاة
+# ============================================================
+
+def simulation_page():
+
+    st.title(
+        "🔬 HYDROMEM Dynamic Simulation"
+    )
+
+
+    st.info(
+        """
+        نموذج ديناميكي تجريبي لدراسة
+        التفاعل بين المتغير البنيوي A
+        ومتغير الذاكرة الحرارية/المادية Θ.
+        
+        النموذج مرحلة محاكاة حاسوبية.
+        لا يمثل تحققاً تجريبياً.
+        """
+    )
+
+
+
+    # --------------------------------------------------------
+    # المعاملات
+    # --------------------------------------------------------
+
+    st.sidebar.header(
+        "⚙️ معاملات النموذج"
+    )
+
+
+    r = st.sidebar.slider(
+        "r",
+        -2.0,
+        3.0,
+        1.0,
+        0.1
+    )
+
+
+    beta = st.sidebar.slider(
+        "β",
+        0.1,
+        3.0,
+        1.0,
+        0.1
+    )
+
+
+    gamma = st.sidebar.slider(
+        "γ",
+        0.0,
+        3.0,
+        0.5,
+        0.1
+    )
+
+
+    eta = st.sidebar.slider(
+        "η",
+        0.1,
+        3.0,
+        0.8,
+        0.1
+    )
+
+
+    tau = st.sidebar.slider(
+        "τ",
+        0.1,
+        10.0,
+        1.0,
+        0.1
+    )
+
+
+    mu = st.sidebar.slider(
+        "μ",
+        -2.0,
+        3.0,
+        0.5,
+        0.1
+    )
+
+
+
+    # --------------------------------------------------------
+    # الزمن والبداية
+    # --------------------------------------------------------
+
+    t_end = st.slider(
+        "مدة المحاكاة",
+        10,
+        200,
+        100
+    )
+
+
+    A0 = st.number_input(
+        "القيمة الابتدائية A",
+        value=0.5
+    )
+
+
+    Theta0 = st.number_input(
+        "القيمة الابتدائية Θ",
+        value=0.2
+    )
+
+
+
+    if st.button(
+        "▶️ تشغيل المحاكاة",
+        use_container_width=True
+    ):
+
+
+        t = np.linspace(
+            0,
+            t_end,
+            1000
+        )
+
+
+        result = solve_ivp(
+            hydromem_model,
+            [
+                0,
+                t_end
+            ],
+            [
+                A0,
+                Theta0
+            ],
+            args=(
+                r,
+                beta,
+                gamma,
+                eta,
+                tau,
+                mu
+            ),
+            t_eval=t
+        )
+
+
+        A = result.y[0]
+
+        Theta = result.y[1]
+
+
+
+        # ----------------------------------------------------
+        # النتائج
+        # ----------------------------------------------------
+
+        col1,col2 = st.columns(2)
+
+
+        with col1:
+
+            st.metric(
+                "A النهائي",
+                f"{A[-1]:.6f}"
+            )
+
+
+        with col2:
+
+            st.metric(
+                "Θ النهائي",
+                f"{Theta[-1]:.6f}"
+            )
+
+
+
+        # ----------------------------------------------------
+        # الرسم A
+        # ----------------------------------------------------
+
+        st.subheader(
+            "تطور A"
+        )
+
+        fig1, ax1 = plt.subplots()
+
+        ax1.plot(
+            t,
+            A
+        )
+
+        ax1.set_xlabel(
+            "Time"
+        )
+
+        ax1.set_ylabel(
+            "A"
+        )
+
+        ax1.grid(
+            True
+        )
+
+        st.pyplot(
+            fig1
+        )
+
+
+
+        # ----------------------------------------------------
+        # الرسم Theta
+        # ----------------------------------------------------
+
+        st.subheader(
+            "تطور Θ"
+        )
+
+        fig2, ax2 = plt.subplots()
+
+        ax2.plot(
+            t,
+            Theta
+        )
+
+        ax2.set_xlabel(
+            "Time"
+        )
+
+        ax2.set_ylabel(
+            "Theta"
+        )
+
+        ax2.grid(
+            True
+        )
+
+        st.pyplot(
+            fig2
+        )
+
+
+
+        # ----------------------------------------------------
+        # مسار الطور
+        # ----------------------------------------------------
+
+        st.subheader(
+            "Phase Space"
+        )
+
+
+        fig3, ax3 = plt.subplots()
+
+
+        ax3.plot(
+            A,
+            Theta
+        )
+
+
+        ax3.set_xlabel(
+            "A"
+        )
+
+        ax3.set_ylabel(
+            "Theta"
+        )
+
+
+        ax3.grid(
+            True
+        )
+
+
+        st.pyplot(
+            fig3
+        )
+
+
+
+        st.success(
+            "اكتملت المحاكاة بنجاح"
+        )
