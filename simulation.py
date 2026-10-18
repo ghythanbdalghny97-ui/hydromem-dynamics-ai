@@ -1,75 +1,348 @@
-import streamlit as st
+"""
+HYDROMEM Dynamics AI
+Simulation Engine
+
+Dynamic Model:
+dA/dt = rA - beta A^3 - gamma A Theta
+
+dTheta/dt =
+(1/tau)(eta A^2(1+mu Theta)-Theta)
+
+"""
+
 import numpy as np
-import pandas as pd
-from scipy.integrate import odeint
-from fpdf import FPDF
-import auth_db
-import re
+import streamlit as st
 
-def clean_text(text):
-    return re.sub(r'[^\x00-\x7F]+', '?', str(text))
+from scipy.integrate import solve_ivp
+import matplotlib.pyplot as plt
 
-def generate_pdf(user_name, params, results_df):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt="HYDROMEM Dynamics AI - Simulation Report", ln=True, align='C')
-    safe_name = clean_text(user_name)
-    pdf.cell(200, 10, txt=f"User: {safe_name}", ln=True)
-    pdf.cell(200, 10, txt=f"Date: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
-    pdf.cell(200, 10, txt="Parameters:", ln=True)
-    for k, v in params.items():
-        pdf.cell(200, 10, txt=f"{k}: {v}", ln=True)
-    pdf.cell(200, 10, txt="Final Results:", ln=True)
-    last_row = results_df.iloc[-1]
-    pdf.cell(200, 10, txt=f"A(t) = {last_row['A(t)']:.4f}", ln=True)
-    pdf.cell(200, 10, txt=f"Theta(t) = {last_row['Theta(t)']:.4f}", ln=True)
-    return bytes(pdf.output())
+
+
+# ============================================================
+# النموذج الرياضي
+# ============================================================
+
+def hydromem_model(
+        t,
+        y,
+        r,
+        beta,
+        gamma,
+        eta,
+        tau,
+        mu
+):
+
+    A, Theta = y
+
+
+    dA = (
+        r*A
+        -
+        beta*A**3
+        -
+        gamma*A*Theta
+    )
+
+
+    dTheta = (
+        1/tau
+    ) * (
+        eta*A**2*(1+mu*Theta)
+        -
+        Theta
+    )
+
+
+    return [
+        dA,
+        dTheta
+    ]
+
+
+
+# ============================================================
+# صفحة المحاكاة
+# ============================================================
 
 def simulation_page():
-    st.title("🔬 محرك المحاكاة")
-    user = st.session_state.user
-    st.markdown("### ⚙️ إعدادات المعاملات")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        r = st.slider("r (معدل النمو)", 0.1, 5.0, 1.0)
-        beta = st.slider("beta (التخميد)", 0.01, 1.0, 0.1)
-        gamma = st.slider("gamma (الاقتران)", 0.0, 2.0, 0.5)
-    with col2:
-        eta = st.slider("eta", 0.1, 2.0, 1.0)
-        mu = st.slider("mu", 0.0, 1.0, 0.1)
-        tau = st.slider("tau (الاسترخاء)", 0.1, 5.0, 1.0)
-        
-    st.divider()
-    run = st.button("🚀 تشغيل المحاكاة", use_container_width=True, type="primary")
 
-    if run:
-        def model(y, t):
-            A, Th = y
-            dA = r * A - beta * (A**3) - gamma * A * Th
-            dTh = (1/tau) * (eta * (A**2) * (1 + mu * Th) - Th)
-            return [dA, dTh]
+    st.title(
+        "🔬 HYDROMEM Dynamic Simulation"
+    )
 
-        t = np.linspace(0, 50, 500)
-        sol = odeint(model, [0.1, 0.0], t)
-        df = pd.DataFrame({"Time": t, "A(t)": sol[:,0], "Theta(t)": sol[:,1]})
+
+    st.info(
+        """
+        نموذج ديناميكي تجريبي لدراسة
+        التفاعل بين المتغير البنيوي A
+        ومتغير الذاكرة الحرارية/المادية Θ.
         
-        st.success("✅ تمت المحاكاة بنجاح")
-        st.line_chart(df.set_index("Time"))
-        
-        try:
-            auth_db.increment_simulation(user['email'])
-        except:
-            pass
-        
-        if user['plan'] != 'individual':
-            pdf_bytes = generate_pdf(user['name'], {"r":r, "beta":beta}, df)
-            st.download_button(
-                "📄 تحميل التقرير (PDF)", 
-                data=pdf_bytes, 
-                file_name="hydromem_report.pdf", 
-                mime="application/pdf"
+        النموذج مرحلة محاكاة حاسوبية.
+        لا يمثل تحققاً تجريبياً.
+        """
+    )
+
+
+
+    # --------------------------------------------------------
+    # المعاملات
+    # --------------------------------------------------------
+
+    st.sidebar.header(
+        "⚙️ معاملات النموذج"
+    )
+
+
+    r = st.sidebar.slider(
+        "r",
+        -2.0,
+        3.0,
+        1.0,
+        0.1
+    )
+
+
+    beta = st.sidebar.slider(
+        "β",
+        0.1,
+        3.0,
+        1.0,
+        0.1
+    )
+
+
+    gamma = st.sidebar.slider(
+        "γ",
+        0.0,
+        3.0,
+        0.5,
+        0.1
+    )
+
+
+    eta = st.sidebar.slider(
+        "η",
+        0.1,
+        3.0,
+        0.8,
+        0.1
+    )
+
+
+    tau = st.sidebar.slider(
+        "τ",
+        0.1,
+        10.0,
+        1.0,
+        0.1
+    )
+
+
+    mu = st.sidebar.slider(
+        "μ",
+        -2.0,
+        3.0,
+        0.5,
+        0.1
+    )
+
+
+
+    # --------------------------------------------------------
+    # الزمن والبداية
+    # --------------------------------------------------------
+
+    t_end = st.slider(
+        "مدة المحاكاة",
+        10,
+        200,
+        100
+    )
+
+
+    A0 = st.number_input(
+        "القيمة الابتدائية A",
+        value=0.5
+    )
+
+
+    Theta0 = st.number_input(
+        "القيمة الابتدائية Θ",
+        value=0.2
+    )
+
+
+
+    if st.button(
+        "▶️ تشغيل المحاكاة",
+        use_container_width=True
+    ):
+
+
+        t = np.linspace(
+            0,
+            t_end,
+            1000
+        )
+
+
+        result = solve_ivp(
+            hydromem_model,
+            [
+                0,
+                t_end
+            ],
+            [
+                A0,
+                Theta0
+            ],
+            args=(
+                r,
+                beta,
+                gamma,
+                eta,
+                tau,
+                mu
+            ),
+            t_eval=t
+        )
+
+
+        A = result.y[0]
+
+        Theta = result.y[1]
+
+
+
+        # ----------------------------------------------------
+        # النتائج
+        # ----------------------------------------------------
+
+        col1,col2 = st.columns(2)
+
+
+        with col1:
+
+            st.metric(
+                "A النهائي",
+                f"{A[-1]:.6f}"
             )
-        else:
-            st.info("🔒 تصدير PDF متاح في باقة الباحث وما فوق.")
+
+
+        with col2:
+
+            st.metric(
+                "Θ النهائي",
+                f"{Theta[-1]:.6f}"
+            )
+
+
+
+        # ----------------------------------------------------
+        # الرسم A
+        # ----------------------------------------------------
+
+        st.subheader(
+            "تطور A"
+        )
+
+        fig1, ax1 = plt.subplots()
+
+        ax1.plot(
+            t,
+            A
+        )
+
+        ax1.set_xlabel(
+            "Time"
+        )
+
+        ax1.set_ylabel(
+            "A"
+        )
+
+        ax1.grid(
+            True
+        )
+
+        st.pyplot(
+            fig1
+        )
+
+
+
+        # ----------------------------------------------------
+        # الرسم Theta
+        # ----------------------------------------------------
+
+        st.subheader(
+            "تطور Θ"
+        )
+
+        fig2, ax2 = plt.subplots()
+
+        ax2.plot(
+            t,
+            Theta
+        )
+
+        ax2.set_xlabel(
+            "Time"
+        )
+
+        ax2.set_ylabel(
+            "Theta"
+        )
+
+        ax2.grid(
+            True
+        )
+
+        st.pyplot(
+            fig2
+        )
+
+
+
+        # ----------------------------------------------------
+        # مسار الطور
+        # ----------------------------------------------------
+
+        st.subheader(
+            "Phase Space"
+        )
+
+
+        fig3, ax3 = plt.subplots()
+
+
+        ax3.plot(
+            A,
+            Theta
+        )
+
+
+        ax3.set_xlabel(
+            "A"
+        )
+
+        ax3.set_ylabel(
+            "Theta"
+        )
+
+
+        ax3.grid(
+            True
+        )
+
+
+        st.pyplot(
+            fig3
+        )
+
+
+
+        st.success(
+            "اكتملت المحاكاة بنجاح"
+        )
