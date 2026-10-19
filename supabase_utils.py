@@ -71,9 +71,7 @@ def create_user(user):
 
     try:
 
-        supabase.table(
-            "users"
-        ).insert(
+        supabase.table("users").insert(
             user
         ).execute()
 
@@ -82,7 +80,7 @@ def create_user(user):
 
     except Exception as e:
 
-        st.error("❌ خطأ أثناء إنشاء المستخدم في قاعدة البيانات")
+        st.error("❌ خطأ إنشاء المستخدم في قاعدة البيانات")
         st.exception(e)
 
         return False
@@ -90,7 +88,7 @@ def create_user(user):
 
 
 # ============================================================
-# تسجيل الدخول التلقائي
+# Remember Token
 # ============================================================
 
 def update_user_token(email, token, expiry):
@@ -100,9 +98,7 @@ def update_user_token(email, token, expiry):
 
     try:
 
-        supabase.table(
-            "users"
-        ).update(
+        supabase.table("users").update(
             {
                 "remember_token": token,
                 "token_expiry": expiry
@@ -132,8 +128,7 @@ def get_user_by_token(token):
     try:
 
         result = (
-            supabase
-            .table("users")
+            supabase.table("users")
             .select("*")
             .eq(
                 "remember_token",
@@ -161,9 +156,7 @@ def clear_user_token(email):
 
     try:
 
-        supabase.table(
-            "users"
-        ).update(
+        supabase.table("users").update(
             {
                 "remember_token": None,
                 "token_expiry": None
@@ -469,7 +462,7 @@ def approve_payment(payment_id, email, plan):
             }
         ).eq(
             "email",
-            email
+            email.lower()
         ).execute()
 
 
