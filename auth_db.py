@@ -18,11 +18,13 @@ import supabase_utils
 import config
 
 
+
 # ============================================================
 # تشفير كلمات المرور
 # ============================================================
 
 def hash_password(password: str):
+
     return hashlib.sha256(
         password.encode("utf-8")
     ).hexdigest()
@@ -33,38 +35,68 @@ def hash_password(password: str):
 # إنشاء حساب جديد
 # ============================================================
 
-def register_user_db(email, password, name, account_type, organization=""):
+def register_user_db(
+        email,
+        password,
+        name,
+        account_type,
+        organization=""
+):
 
-    existing = supabase_utils.get_user_by_email(email)
+    existing = supabase_utils.get_user_by_email(
+        email
+    )
 
     if existing:
         return False, "الحساب موجود مسبقاً"
 
 
+
     password_hash = hash_password(password)
 
 
+
     user = {
+
         "email": email.lower(),
-        "password": password_hash,
+
+        # مطابق لجدول Supabase
+        "password_hash": password_hash,
+
         "name": name,
+
         "account_type": account_type,
+
         "organization": organization,
+
         "plan": "individual",
+
         "team_id": None,
+
         "remember_token": None,
+
         "token_expiry": None,
+
         "created_at": datetime.utcnow().isoformat()
+
     }
 
 
-    result = supabase_utils.create_user(user)
+
+    result = supabase_utils.create_user(
+        user
+    )
+
 
 
     if result:
+
         return True, "تم إنشاء الحساب بنجاح"
 
+
+
     return False, "حدث خطأ أثناء إنشاء الحساب"
+
 
 
 
@@ -80,17 +112,25 @@ def login_user_db(email, password):
 
 
     if not user:
+
         return None
 
 
-    password_hash = hash_password(password)
+
+    password_hash = hash_password(
+        password
+    )
 
 
-    if user.get("password") != password_hash:
+
+    if user.get("password_hash") != password_hash:
+
         return None
+
 
 
     return user
+
 
 
 
@@ -103,13 +143,19 @@ def generate_remember_token(email):
     token = secrets.token_urlsafe(48)
 
 
+
     expiry = (
+
         datetime.utcnow()
+
         +
+
         timedelta(
             days=config.TOKEN_VALID_DAYS
         )
+
     )
+
 
 
     success = supabase_utils.update_user_token(
@@ -119,11 +165,15 @@ def generate_remember_token(email):
     )
 
 
+
     if success:
+
         return token
 
 
+
     return None
+
 
 
 
@@ -133,11 +183,16 @@ def generate_remember_token(email):
 
 def login_with_token(token):
 
-    user = supabase_utils.get_user_by_token(token)
+    user = supabase_utils.get_user_by_token(
+        token
+    )
+
 
 
     if not user:
+
         return None
+
 
 
     expiry = user.get(
@@ -145,22 +200,29 @@ def login_with_token(token):
     )
 
 
+
     if expiry:
+
 
         expiry_date = datetime.fromisoformat(
             expiry.replace("Z", "")
         )
 
+
         if datetime.utcnow() > expiry_date:
+
 
             supabase_utils.clear_user_token(
                 user["email"]
             )
 
+
             return None
 
 
+
     return user
+
 
 
 
@@ -176,6 +238,7 @@ def logout_user(email):
 
 
 
+
 # ============================================================
 # جلب أعضاء الفريق
 # ============================================================
@@ -185,6 +248,7 @@ def get_team_members(team_id):
     return supabase_utils.get_team_members(
         team_id
     )
+
 
 
 
@@ -201,12 +265,15 @@ def add_team_member(
         max_users
 ):
 
+
     members = supabase_utils.get_team_by_owner(
         owner_email
     )
 
 
+
     if len(members) >= max_users:
+
         return False, "تم تجاوز الحد المسموح"
 
 
@@ -221,6 +288,7 @@ def add_team_member(
 
 
 
+
 # ============================================================
 # طلب ترقية الاشتراك
 # ============================================================
@@ -231,6 +299,7 @@ def submit_payment_request(
         amount,
         receipt
 ):
+
 
     data = {
 
@@ -244,15 +313,16 @@ def submit_payment_request(
 
         "status": "pending",
 
-        "created_at":
-            datetime.utcnow().isoformat()
+        "created_at": datetime.utcnow().isoformat()
 
     }
+
 
 
     return supabase_utils.create_payment_request(
         data
     )
+
 
 
 
@@ -266,13 +336,19 @@ def get_pending_payments():
 
 
 
-def approve_payment(payment_id, email, plan):
+
+def approve_payment(
+        payment_id,
+        email,
+        plan
+):
 
     return supabase_utils.approve_payment(
         payment_id,
         email,
         plan
     )
+
 
 
 
