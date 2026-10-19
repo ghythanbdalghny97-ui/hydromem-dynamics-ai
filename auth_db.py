@@ -51,16 +51,13 @@ def register_user_db(
         return False, "الحساب موجود مسبقاً"
 
 
-
     password_hash = hash_password(password)
-
 
 
     user = {
 
         "email": email.lower(),
 
-        # مطابق لجدول Supabase
         "password_hash": password_hash,
 
         "name": name,
@@ -82,17 +79,14 @@ def register_user_db(
     }
 
 
-
     result = supabase_utils.create_user(
         user
     )
 
 
-
     if result:
 
         return True, "تم إنشاء الحساب بنجاح"
-
 
 
     return False, "حدث خطأ أثناء إنشاء الحساب"
@@ -112,9 +106,7 @@ def login_user_db(email, password):
 
 
     if not user:
-
         return None
-
 
 
     password_hash = hash_password(
@@ -122,11 +114,9 @@ def login_user_db(email, password):
     )
 
 
-
     if user.get("password_hash") != password_hash:
 
         return None
-
 
 
     return user
@@ -143,19 +133,13 @@ def generate_remember_token(email):
     token = secrets.token_urlsafe(48)
 
 
-
     expiry = (
-
         datetime.utcnow()
-
         +
-
         timedelta(
             days=config.TOKEN_VALID_DAYS
         )
-
     )
-
 
 
     success = supabase_utils.update_user_token(
@@ -165,11 +149,9 @@ def generate_remember_token(email):
     )
 
 
-
     if success:
 
         return token
-
 
 
     return None
@@ -188,11 +170,9 @@ def login_with_token(token):
     )
 
 
-
     if not user:
 
         return None
-
 
 
     expiry = user.get(
@@ -200,25 +180,26 @@ def login_with_token(token):
     )
 
 
-
     if expiry:
 
+        try:
 
-        expiry_date = datetime.fromisoformat(
-            expiry.replace("Z", "")
-        )
-
-
-        if datetime.utcnow() > expiry_date:
-
-
-            supabase_utils.clear_user_token(
-                user["email"]
+            expiry_date = datetime.fromisoformat(
+                expiry.replace("Z", "")
             )
 
 
-            return None
+            if datetime.utcnow() > expiry_date:
 
+                supabase_utils.clear_user_token(
+                    user["email"]
+                )
+
+                return None
+
+        except:
+
+            return user
 
 
     return user
@@ -265,11 +246,9 @@ def add_team_member(
         max_users
 ):
 
-
     members = supabase_utils.get_team_by_owner(
         owner_email
     )
-
 
 
     if len(members) >= max_users:
@@ -282,7 +261,7 @@ def add_team_member(
         email,
         password,
         name,
-        role,
+        "team_member",
         ""
     )
 
@@ -300,7 +279,6 @@ def submit_payment_request(
         receipt
 ):
 
-
     data = {
 
         "user_email": email,
@@ -316,7 +294,6 @@ def submit_payment_request(
         "created_at": datetime.utcnow().isoformat()
 
     }
-
 
 
     return supabase_utils.create_payment_request(
