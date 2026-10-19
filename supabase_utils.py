@@ -29,7 +29,8 @@ try:
 
 except Exception as e:
     supabase = None
-    print("Supabase connection error:", e)
+    st.error("❌ خطأ اتصال Supabase")
+    st.exception(e)
 
 
 
@@ -55,7 +56,8 @@ def get_user_by_email(email):
             return result.data[0]
 
     except Exception as e:
-        print(e)
+        st.error("❌ خطأ جلب المستخدم")
+        st.exception(e)
 
     return None
 
@@ -64,20 +66,26 @@ def get_user_by_email(email):
 def create_user(user):
 
     if not supabase:
+        st.error("❌ Supabase غير متصل")
         return False
 
     try:
 
-        supabase.table("users").insert(
+        supabase.table(
+            "users"
+        ).insert(
             user
         ).execute()
 
         return True
 
-    except Exception as e:
-        print(e)
 
-    return False
+    except Exception as e:
+
+        st.error("❌ خطأ أثناء إنشاء المستخدم في قاعدة البيانات")
+        st.exception(e)
+
+        return False
 
 
 
@@ -92,7 +100,9 @@ def update_user_token(email, token, expiry):
 
     try:
 
-        supabase.table("users").update(
+        supabase.table(
+            "users"
+        ).update(
             {
                 "remember_token": token,
                 "token_expiry": expiry
@@ -104,10 +114,13 @@ def update_user_token(email, token, expiry):
 
         return True
 
-    except Exception as e:
-        print(e)
 
-    return False
+    except Exception as e:
+
+        st.error("❌ خطأ تحديث رمز الدخول")
+        st.exception(e)
+
+        return False
 
 
 
@@ -119,9 +132,13 @@ def get_user_by_token(token):
     try:
 
         result = (
-            supabase.table("users")
+            supabase
+            .table("users")
             .select("*")
-            .eq("remember_token", token)
+            .eq(
+                "remember_token",
+                token
+            )
             .execute()
         )
 
@@ -129,7 +146,9 @@ def get_user_by_token(token):
             return result.data[0]
 
     except Exception as e:
-        print(e)
+
+        st.error("❌ خطأ قراءة رمز الدخول")
+        st.exception(e)
 
     return None
 
@@ -142,7 +161,9 @@ def clear_user_token(email):
 
     try:
 
-        supabase.table("users").update(
+        supabase.table(
+            "users"
+        ).update(
             {
                 "remember_token": None,
                 "token_expiry": None
@@ -154,10 +175,13 @@ def clear_user_token(email):
 
         return True
 
-    except Exception as e:
-        print(e)
 
-    return False
+    except Exception as e:
+
+        st.error("❌ خطأ حذف رمز الدخول")
+        st.exception(e)
+
+        return False
 
 
 
@@ -165,12 +189,7 @@ def clear_user_token(email):
 # المحادثات
 # ============================================================
 
-def save_chat_session(
-        email,
-        title,
-        messages,
-        session_id=None
-):
+def save_chat_session(email, title, messages, session_id=None):
 
     if not supabase:
         return None
@@ -207,11 +226,16 @@ def save_chat_session(
             .execute()
         )
 
+
         if result.data:
             return result.data[0]["id"]
 
+
     except Exception as e:
-        print(e)
+
+        st.error("❌ خطأ حفظ المحادثة")
+        st.exception(e)
+
 
     return None
 
@@ -243,8 +267,11 @@ def get_chat_sessions(email, limit=10):
 
         return result.data or []
 
+
     except Exception as e:
-        print(e)
+
+        st.error("❌ خطأ جلب المحادثات")
+        st.exception(e)
 
     return []
 
@@ -272,8 +299,12 @@ def get_chat_session_by_id(session_id):
         if result.data:
             return result.data[0]
 
+
     except Exception as e:
-        print(e)
+
+        st.error("❌ خطأ فتح المحادثة")
+        st.exception(e)
+
 
     return None
 
@@ -295,8 +326,13 @@ def delete_chat_session(session_id):
 
         return True
 
-    except Exception:
-        return False
+
+    except Exception as e:
+
+        st.error("❌ خطأ حذف المحادثة")
+        st.exception(e)
+
+    return False
 
 
 
@@ -323,8 +359,13 @@ def get_team_members(team_id):
 
         return result.data or []
 
-    except Exception:
-        return []
+
+    except Exception as e:
+
+        st.error("❌ خطأ جلب الفريق")
+        st.exception(e)
+
+    return []
 
 
 
@@ -360,8 +401,11 @@ def create_payment_request(data):
 
         return True
 
+
     except Exception as e:
-        print(e)
+
+        st.error("❌ خطأ إنشاء طلب الدفع")
+        st.exception(e)
 
     return False
 
@@ -388,8 +432,13 @@ def get_pending_payments():
 
         return result.data or []
 
-    except Exception:
-        return []
+
+    except Exception as e:
+
+        st.error("❌ خطأ جلب المدفوعات")
+        st.exception(e)
+
+    return []
 
 
 
@@ -426,7 +475,10 @@ def approve_payment(payment_id, email, plan):
 
         return True
 
+
     except Exception as e:
-        print(e)
+
+        st.error("❌ خطأ تفعيل الاشتراك")
+        st.exception(e)
 
     return False
