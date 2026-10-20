@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
+from fpdf import FPDF
 import config
 
 def hydromem_model(t, y, r, beta, gamma, eta, tau, mu):
@@ -10,11 +11,39 @@ def hydromem_model(t, y, r, beta, gamma, eta, tau, mu):
     dTheta = (1/tau) * (eta*A**2*(1+mu*Theta) - Theta)
     return [dA, dTheta]
 
+def generate_pdf(user_name, params, final_A, final_Theta):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # عنوان التقرير
+    pdf.cell(200, 10, txt="HYDROMEM Dynamics AI - Simulation Report", ln=True, align='C')
+    pdf.cell(200, 10, txt=f"User: {user_name}", ln=True)
+    pdf.cell(200, 10, txt="----------------------------------------", ln=True)
+    
+    # المعاملات
+    pdf.cell(200, 10, txt="Parameters:", ln=True)
+    for k, v in params.items():
+        pdf.cell(200, 10, txt=f"{k}: {v}", ln=True)
+        
+    pdf.cell(200, 10, txt="----------------------------------------", ln=True)
+    
+    # النتائج
+    pdf.cell(200, 10, txt="Final Results:", ln=True)
+    pdf.cell(200, 10, txt=f"A(t) Final = {final_A:.4f}", ln=True)
+    pdf.cell(200, 10, txt=f"Theta(t) Final = {final_Theta:.4f}", ln=True)
+    
+    # تحذير علمي
+    pdf.cell(200, 10, txt="----------------------------------------", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 10, txt="Disclaimer: This is a computational simulation. Results require experimental validation before real-world application.")
+    
+    return bytes(pdf.output())
+
 def render():
     st.title("🔬 HYDROMEM Dynamic Simulation")
-    st.info("نموذج ديناميكي تجريبي لدراسة التفاعل بين المتغير البنيوي A ومتغير الذاكرة Θ.")
+    st.info("نموذج ديناميكي لدراسة التفاعل بين المتغير البنيوي A ومتغير الذاكرة Θ.")
     
-    # جلب الباقة الحالية للتحقق من الصلاحيات
     user = st.session_state.user
     plan_info = config.PLANS.get(user.get("plan", "individual"), config.PLANS["individual"])
 
@@ -45,9 +74,16 @@ def render():
         ax[1].plot(t, Theta, color='orange'); ax[1].set_title("Theta vs Time"); ax[1].grid(True)
         st.pyplot(fig)
 
-        # التحقق من صلاحية تصدير الـ PDF
+        # تصدير PDF حسب الباقة
         if plan_info.get("allow_pdf"):
             st.success("✅ اكتملت المحاكاة. يمكنك تحميل التقرير.")
-            st.download_button("📄 تحميل التقرير (PDF)", data="HYDROMEM Simulation Report", file_name="report.pdf")
+            params = {"r": r, "beta": beta, "gamma": gamma, "eta": eta, "tau": tau, "mu": mu}
+            pdf_bytes = generate_pdf(user.get('name', 'Researcher'), params, A[-1], Theta[-1])
+            st.download_button(
+                label="📄 تحميل التقرير (PDF)",
+                data=pdf_bytes,
+                file_name="hydromem_report.pdf",
+                mime="application/pdf"
+            )
         else:
             st.warning("🔒 تصدير التقارير (PDF) متاح في باقة الباحث وما فوق. يرجى ترقية اشتراكك.")
