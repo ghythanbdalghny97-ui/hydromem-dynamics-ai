@@ -1,477 +1,74 @@
-"""
-HYDROMEM Dynamics AI
-Supabase Database Utilities
-
-Responsible for:
-- Users database
-- Authentication support
-- Remember token
-- Chat history
-- Payments
-- Teams
-"""
-
 import streamlit as st
 from datetime import datetime
-
-
-# ============================================================
-# اتصال Supabase
-# ============================================================
+import config
 
 try:
     from supabase import create_client, Client
-
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-
-    supabase: Client = create_client(url, key)
-
+    supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
 except Exception as e:
     supabase = None
-    st.error("❌ خطأ اتصال Supabase")
-    st.exception(e)
+    st.error(f"خطأ في الاتصال بقاعدة البيانات: {e}")
 
-
-
-# ============================================================
-# المستخدمون
-# ============================================================
-
+# ------------ المستخدمون ------------
 def get_user_by_email(email):
+    if not supabase: return None
+    res = supabase.table("users").select("*").eq("email", email.lower()).execute()
+    return res.data[0] if res.data else None
 
-    if not supabase:
-        return None
-
+def create_user(user_data):
+    if not supabase: return False
     try:
-        result = (
-            supabase
-            .table("users")
-            .select("*")
-            .eq("email", email.lower())
-            .execute()
-        )
-
-        if result.data:
-            return result.data[0]
-
-    except Exception as e:
-        st.error("❌ خطأ جلب المستخدم")
-        st.exception(e)
-
-    return None
-
-
-
-def create_user(user):
-
-    if not supabase:
-        st.error("❌ Supabase غير متصل")
-        return False
-
-    try:
-
-        supabase.table("users").insert(
-            user
-        ).execute()
-
+        supabase.table("users").insert(user_data).execute()
         return True
+    except: return False
 
-
-    except Exception as e:
-
-        st.error("❌ خطأ إنشاء المستخدم في قاعدة البيانات")
-        st.exception(e)
-
-        return False
-
-
-
-# ============================================================
-# Remember Token
-# ============================================================
-
-def update_user_token(email, token, expiry):
-
-    if not supabase:
-        return False
-
+def update_user(email, data):
+    if not supabase: return False
     try:
-
-        supabase.table("users").update(
-            {
-                "remember_token": token,
-                "token_expiry": expiry
-            }
-        ).eq(
-            "email",
-            email.lower()
-        ).execute()
-
+        supabase.table("users").update(data).eq("email", email.lower()).execute()
         return True
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ تحديث رمز الدخول")
-        st.exception(e)
-
-        return False
-
-
+    except: return False
 
 def get_user_by_token(token):
+    if not supabase: return None
+    res = supabase.table("users").select("*").eq("remember_token", token).execute()
+    return res.data[0] if res.data else None
 
-    if not supabase:
-        return None
+# ------------ المحادثات ------------
+def save_chat(email, title, messages, session_id=None):
+    if not supabase: return None
+    data = {"user_email": email, "title": title, "messages": messages, "updated_at": datetime.utcnow().isoformat()}
+    if session_id:
+        supabase.table("chat_sessions").update(data).eq("id", session_id).execute()
+        return session_id
+    res = supabase.table("chat_sessions").insert(data).execute()
+    return res.data[0]["id"] if res.data else None
 
+def get_chats(email, limit=10):
+    if not supabase: return []
+    res = supabase.table("chat_sessions").select("id,title").eq("user_email", email).order("updated_at", desc=True).limit(limit).execute()
+    return res.data or []
+
+def get_chat_by_id(session_id):
+    if not supabase: return None
+    res = supabase.table("chat_sessions").select("*").eq("id", session_id).execute()
+    return res.data[0] if res.data else None
+
+# ------------ المدفوعات ------------
+def create_payment(email, plan, amount, ref):
+    if not supabase: return False
     try:
-
-        result = (
-            supabase.table("users")
-            .select("*")
-            .eq(
-                "remember_token",
-                token
-            )
-            .execute()
-        )
-
-        if result.data:
-            return result.data[0]
-
-    except Exception as e:
-
-        st.error("❌ خطأ قراءة رمز الدخول")
-        st.exception(e)
-
-    return None
-
-
-
-def clear_user_token(email):
-
-    if not supabase:
-        return False
-
-    try:
-
-        supabase.table("users").update(
-            {
-                "remember_token": None,
-                "token_expiry": None
-            }
-        ).eq(
-            "email",
-            email.lower()
-        ).execute()
-
+        supabase.table("payments").insert({"user_email": email.lower(), "plan": plan, "amount": amount, "receipt_ref": ref, "status": "pending"}).execute()
         return True
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ حذف رمز الدخول")
-        st.exception(e)
-
-        return False
-
-
-
-# ============================================================
-# المحادثات
-# ============================================================
-
-def save_chat_session(email, title, messages, session_id=None):
-
-    if not supabase:
-        return None
-
-    try:
-
-        data = {
-            "user_email": email,
-            "title": title,
-            "messages": messages,
-            "updated_at": datetime.utcnow().isoformat()
-        }
-
-
-        if session_id:
-
-            supabase.table(
-                "chat_sessions"
-            ).update(
-                data
-            ).eq(
-                "id",
-                session_id
-            ).execute()
-
-            return session_id
-
-
-        result = (
-            supabase.table(
-                "chat_sessions"
-            )
-            .insert(data)
-            .execute()
-        )
-
-
-        if result.data:
-            return result.data[0]["id"]
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ حفظ المحادثة")
-        st.exception(e)
-
-
-    return None
-
-
-
-def get_chat_sessions(email, limit=10):
-
-    if not supabase:
-        return []
-
-    try:
-
-        result = (
-            supabase.table(
-                "chat_sessions"
-            )
-            .select("*")
-            .eq(
-                "user_email",
-                email
-            )
-            .order(
-                "updated_at",
-                desc=True
-            )
-            .limit(limit)
-            .execute()
-        )
-
-        return result.data or []
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ جلب المحادثات")
-        st.exception(e)
-
-    return []
-
-
-
-def get_chat_session_by_id(session_id):
-
-    if not supabase:
-        return None
-
-    try:
-
-        result = (
-            supabase.table(
-                "chat_sessions"
-            )
-            .select("*")
-            .eq(
-                "id",
-                session_id
-            )
-            .execute()
-        )
-
-        if result.data:
-            return result.data[0]
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ فتح المحادثة")
-        st.exception(e)
-
-
-    return None
-
-
-
-def delete_chat_session(session_id):
-
-    if not supabase:
-        return False
-
-    try:
-
-        supabase.table(
-            "chat_sessions"
-        ).delete().eq(
-            "id",
-            session_id
-        ).execute()
-
-        return True
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ حذف المحادثة")
-        st.exception(e)
-
-    return False
-
-
-
-# ============================================================
-# الفرق
-# ============================================================
-
-def get_team_members(team_id):
-
-    if not supabase:
-        return []
-
-    try:
-
-        result = (
-            supabase.table("users")
-            .select("*")
-            .eq(
-                "team_id",
-                team_id
-            )
-            .execute()
-        )
-
-        return result.data or []
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ جلب الفريق")
-        st.exception(e)
-
-    return []
-
-
-
-def get_team_by_owner(email):
-
-    user = get_user_by_email(email)
-
-    if not user:
-        return []
-
-    return get_team_members(
-        user.get("team_id") or user.get("id")
-    )
-
-
-
-# ============================================================
-# الدفع والاشتراكات
-# ============================================================
-
-def create_payment_request(data):
-
-    if not supabase:
-        return False
-
-    try:
-
-        supabase.table(
-            "payments"
-        ).insert(
-            data
-        ).execute()
-
-        return True
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ إنشاء طلب الدفع")
-        st.exception(e)
-
-    return False
-
-
+    except: return False
 
 def get_pending_payments():
+    if not supabase: return []
+    res = supabase.table("payments").select("*").eq("status", "pending").order("created_at", desc=True).execute()
+    return res.data or []
 
-    if not supabase:
-        return []
-
-    try:
-
-        result = (
-            supabase.table(
-                "payments"
-            )
-            .select("*")
-            .eq(
-                "status",
-                "pending"
-            )
-            .execute()
-        )
-
-        return result.data or []
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ جلب المدفوعات")
-        st.exception(e)
-
-    return []
-
-
-
-def approve_payment(payment_id, email, plan):
-
-    if not supabase:
-        return False
-
-    try:
-
-        supabase.table(
-            "payments"
-        ).update(
-            {
-                "status": "approved"
-            }
-        ).eq(
-            "id",
-            payment_id
-        ).execute()
-
-
-        supabase.table(
-            "users"
-        ).update(
-            {
-                "plan": plan
-            }
-        ).eq(
-            "email",
-            email.lower()
-        ).execute()
-
-
-        return True
-
-
-    except Exception as e:
-
-        st.error("❌ خطأ تفعيل الاشتراك")
-        st.exception(e)
-
-    return False
+# ------------ الفريق ------------
+def get_team(team_id):
+    if not supabase: return []
+    res = supabase.table("users").select("name,email,role").eq("team_id", team_id).execute()
+    return res.data or []
