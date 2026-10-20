@@ -1,23 +1,22 @@
 {
   "name": "HYDROMEM Dynamics AI",
   "short_name": "HYDROMEM",
-  "description": "AI-powered computational platform for mathematical modeling, dynamic simulation, and scientific research.",
-  "version": "16.0.0",
-  "lang": "en",
-  "dir": "ltr",
+  "description": "مساعدك الطبي الذكي ومنصة المحاكاة المتقدمة للأنظمة الديناميكية المعقدة.",
+  "version": "22.0.0",
+  "lang": "ar",
+  "dir": "rtl",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#1565C0",
-  "categories": [
-    "science",
-    "education",
-    "research",
-    "artificial-intelligence",
-    "simulation"
-  ],
+  "categories": ["medical", "science", "education", "research"],
+  "author": {
+    "name": "Abdul Ghani Saleh Mohsen Mohamed Ghaithan",
+    "email": "ghythanbdalghny97@gmail.com",
+    "country": "Yemen"
+  },
+  "copyright": "Copyright © 2026 Abdul Ghani Saleh Mohsen Mohamed Ghaithan. All Rights Reserved.",
   "icons": [
     {
       "src": "icon-192.png",
@@ -29,32 +28,5 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ],
-  "author": {
-    "name": "Abdul Ghani Saleh Mohsen Mohamed Ghaithan",
-    "email": "ghythanbdalghny97@gmail.com",
-    "phone": "+967779193805",
-    "country": "Yemen"
-  },
-  "copyright": "Copyright © 2026 Abdul Ghani Saleh Mohsen Mohamed Ghaithan. All Rights Reserved.",
-  "license": "Custom Research License v1.0",
-  "homepage": "https://i.z28y4zma.streamlit.app",
-  "repository": "https://github.com/ghythanbdalghny97-ui/hydromem-dynamics-ai",
-  "research_status": "Research Prototype (Computational Stage)",
-  "experimental_validation": false,
-  "features": [
-    "HYDROMEM Chat AI",
-    "Dynamic Simulation",
-    "Mathematical Modeling",
-    "Scientific AI Assistant",
-    "PDF Analysis",
-    "Word Analysis",
-    "Excel Analysis",
-    "CSV Analysis",
-    "Image Analysis",
-    "Multi-model AI",
-    "Research Workspace",
-    "User Accounts",
-    "Subscription System"
   ]
 }
