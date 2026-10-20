@@ -1,340 +1,150 @@
-"""
-HYDROMEM Dynamics AI
-Authentication Database Module
-
-Responsible for:
-- User registration
-- Login
-- Password security
-- Persistent login token
-- Team management
-"""
-
 import hashlib
-import secrets
+import streamlit as st
 from datetime import datetime, timedelta
+import uuid
 
-import supabase_utils
-import config
+def _get_client():
+    try:
+        from supabase import create_client
+    except ImportError:
+        return None
+    url = st.secrets.get("SUPABASE_URL", "").strip()
+    key = st.secrets.get("SUPABASE_KEY", "").strip()
+    if not url or not key: return None
+    try: return create_client(url, key)
+    except Exception: return None
 
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
-
-# ============================================================
-# تشفير كلمات المرور
-# ============================================================
-
-def hash_password(password: str):
-
-    return hashlib.sha256(
-        password.encode("utf-8")
-    ).hexdigest()
-
-
-
-# ============================================================
-# إنشاء حساب جديد
-# ============================================================
-
-def register_user_db(
-        email,
-        password,
-        name,
-        account_type,
-        organization=""
-):
-
-    existing = supabase_utils.get_user_by_email(
-        email
-    )
-
-    if existing:
-        return False, "الحساب موجود مسبقاً"
-
-
-    password_hash = hash_password(password)
-
-
-    user = {
-
-        "email": email.lower(),
-
-        "password_hash": password_hash,
-
-        "name": name,
-
-        "account_type": account_type,
-
-        "organization": organization,
-
-        "plan": "individual",
-
-        "team_id": None,
-
-        "remember_token": None,
-
-        "token_expiry": None,
-
-        "created_at": datetime.utcnow().isoformat()
-
-    }
-
-
-    result = supabase_utils.create_user(
-        user
-    )
-
-
-    if result:
-
-        return True, "تم إنشاء الحساب بنجاح"
-
-
-    return False, "حدث خطأ أثناء إنشاء الحساب"
-
-
-
-
-# ============================================================
-# تسجيل الدخول العادي
-# ============================================================
+# ==========================================
+# المستخدمون
+# ==========================================
+def register_user_db(email, password, name, account_type, org=None):
+    client = _get_client()
+    if not client: return False, "فشل الاتصال بقاعدة البيانات."
+    try:
+        if client.table("users").select("email").eq("email", email.lower()).execute().data:
+            return False, "هذا البريد مسجل مسبقاً."
+        data = {
+            "email": email.lower(), "password_hash": hash_password(password),
+            "name": name, "account_type": account_type, "organization": org, "plan": account_type
+        }
+        client.table("users").insert(data).execute()
+        return True, "تم إنشاء الحساب بنجاح."
+    except Exception as e: return False, f"خطأ: {e}"
 
 def login_user_db(email, password):
-
-    user = supabase_utils.get_user_by_email(
-        email.lower()
-    )
-
-
-    if not user:
-        return None
-
-
-    password_hash = hash_password(
-        password
-    )
-
-
-    if user.get("password_hash") != password_hash:
-
-        return None
-
-
-    return user
-
-
-
-
-# ============================================================
-# إنشاء Remember Token
-# ============================================================
-
-def generate_remember_token(email):
-
-    token = secrets.token_urlsafe(48)
-
-
-    expiry = (
-        datetime.utcnow()
-        +
-        timedelta(
-            days=config.TOKEN_VALID_DAYS
-        )
-    )
-
-
-    success = supabase_utils.update_user_token(
-        email,
-        token,
-        expiry.isoformat()
-    )
-
-
-    if success:
-
-        return token
-
-
-    return None
-
-
-
-
-# ============================================================
-# تسجيل الدخول باستخدام التوكن
-# ============================================================
-
-def login_with_token(token):
-
-    user = supabase_utils.get_user_by_token(
-        token
-    )
-
-
-    if not user:
-
-        return None
-
-
-    expiry = user.get(
-        "token_expiry"
-    )
-
-
-    if expiry:
-
-        try:
-
-            expiry_date = datetime.fromisoformat(
-                expiry.replace("Z", "")
-            )
-
-
-            if datetime.utcnow() > expiry_date:
-
-                supabase_utils.clear_user_token(
-                    user["email"]
-                )
-
-                return None
-
-        except:
-
-            return user
-
-
-    return user
-
-
-
-
-# ============================================================
-# تسجيل الخروج
-# ============================================================
-
-def logout_user(email):
-
-    return supabase_utils.clear_user_token(
-        email
-    )
-
-
-
-
-# ============================================================
-# جلب أعضاء الفريق
-# ============================================================
-
-def get_team_members(team_id):
-
-    return supabase_utils.get_team_members(
-        team_id
-    )
-
-
-
-
-# ============================================================
-# إضافة عضو للفريق
-# ============================================================
-
-def add_team_member(
-        owner_email,
-        name,
-        email,
-        password,
-        role,
-        max_users
-):
-
-    members = supabase_utils.get_team_by_owner(
-        owner_email
-    )
-
-
-    if len(members) >= max_users:
-
-        return False, "تم تجاوز الحد المسموح"
-
-
-
-    return register_user_db(
-        email,
-        password,
-        name,
-        "team_member",
-        ""
-    )
-
-
-
-
-# ============================================================
-# طلب ترقية الاشتراك
-# ============================================================
-
-def submit_payment_request(
-        email,
-        plan,
-        amount,
-        receipt
-):
-
-    data = {
-
-        "user_email": email,
-
-        "plan": plan,
-
-        "amount": amount,
-
-        "receipt_ref": receipt,
-
-        "status": "pending",
-
-        "created_at": datetime.utcnow().isoformat()
-
-    }
-
-
-    return supabase_utils.create_payment_request(
-        data
-    )
-
-
-
-
-# ============================================================
-# إدارة الدفع
-# ============================================================
-
-def get_pending_payments():
-
-    return supabase_utils.get_pending_payments()
-
-
-
-
-def approve_payment(
-        payment_id,
-        email,
-        plan
-):
-
-    return supabase_utils.approve_payment(
-        payment_id,
-        email,
-        plan
-    )
-
-
-
-
-# ============================================================
-# تحديث بيانات المستخدم
-# ============================================================
+    client = _get_client()
+    if not client: return None
+    try:
+        pwd_hash = hash_password(password)
+        res = client.table("users").select("*").eq("email", email.lower()).eq("password_hash", pwd_hash).execute()
+        return res.data[0] if res.data else None
+    except Exception: return None
 
 def get_user_by_email(email):
+    client = _get_client()
+    if not client: return None
+    try:
+        res = client.table("users").select("*").eq("email", email.lower()).execute()
+        return res.data[0] if res.data else None
+    except Exception: return None
 
-    return supabase_utils.get_user_by_email(
-        email
-    )
+def generate_remember_token(email):
+    client = _get_client()
+    if not client: return None
+    try:
+        token = str(uuid.uuid4())
+        client.table("users").update({"remember_token": token}).eq("email", email.lower()).execute()
+        return token
+    except Exception: return None
+
+def login_with_token(token):
+    client = _get_client()
+    if not client: return None
+    try:
+        res = client.table("users").select("*").eq("remember_token", token).execute()
+        return res.data[0] if res.data else None
+    except Exception: return None
+
+def update_user_plan(email, new_plan, expiry_date=None):
+    client = _get_client()
+    if not client: return False
+    try:
+        data = {"plan": new_plan}
+        if expiry_date: data["expiry_date"] = expiry_date
+        client.table("users").update(data).eq("email", email.lower()).execute()
+        return True
+    except Exception: return False
+
+# ==========================================
+# الدفع (تم إصلاحها هنا لترجع قيمتين)
+# ==========================================
+def submit_payment_request(email, plan, amount, receipt_ref):
+    client = _get_client()
+    if not client: return False, "فشل الاتصال."
+    try:
+        data = {
+            "user_email": email.lower(), 
+            "plan": plan, 
+            "amount": float(amount),
+            "receipt_ref": str(receipt_ref), 
+            "status": "pending"
+        }
+        client.table("payments").insert(data).execute()
+        return True, "تم إرسال الطلب بنجاح. بانتظار موافقة الإدارة."
+    except Exception as e: 
+        return False, f"خطأ في حفظ الطلب: {e}"
+
+def get_pending_payments():
+    client = _get_client()
+    if not client: return []
+    try:
+        return client.table("payments").select("*").eq("status", "pending").order("created_at", desc=True).execute().data or []
+    except Exception: return []
+
+def approve_payment(payment_id, user_email, plan):
+    client = _get_client()
+    if not client: return False
+    try:
+        client.table("payments").update({"status": "approved"}).eq("id", payment_id).execute()
+        expiry = (datetime.now() + timedelta(days=30)).isoformat()
+        update_user_plan(user_email, plan, expiry)
+        return True
+    except Exception: return False
+
+# ==========================================
+# إدارة الفريق
+# ==========================================
+def add_team_member(owner_email, name, email, password, role, max_users):
+    client = _get_client()
+    if not client: return False, "فشل الاتصال."
+    try:
+        owner = get_user_by_email(owner_email)
+        team_id = owner.get("team_id") or owner["id"]
+        if not owner.get("team_id"):
+            client.table("users").update({"team_id": team_id}).eq("email", owner_email.lower()).execute()
+        
+        members = client.table("users").select("id").eq("team_id", team_id).execute()
+        if len(members.data) >= max_users:
+            return False, f"وصلت للحد الأقصى ({max_users} مستخدمين)."
+        
+        if get_user_by_email(email): 
+            return False, "البريد مسجل مسبقاً."
+            
+        data = {
+            "email": email.lower(), "password_hash": hash_password(password), "name": name,
+            "account_type": owner.get("account_type"), "organization": owner.get("organization"),
+            "plan": owner.get("plan"), "team_id": team_id, "role": role
+        }
+        client.table("users").insert(data).execute()
+        return True, "تمت إضافة العضو بنجاح."
+    except Exception as e: return False, f"خطأ: {e}"
+
+def get_team_members(team_id):
+    client = _get_client()
+    if not client: return []
+    try:
+        return client.table("users").select("name,email,role").eq("team_id", team_id).execute().data or []
+    except Exception: return []
