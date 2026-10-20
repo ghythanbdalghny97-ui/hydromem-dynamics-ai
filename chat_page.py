@@ -1,465 +1,103 @@
-"""
-HYDROMEM Dynamics AI
-Chat Interface Module
-
-AI Chat:
-- Groq
-- Gemini
-- File analysis
-- Chat history
-"""
-
-import re
-import pandas as pd
 import streamlit as st
-
+import pandas as pd
 from PIL import Image
 from pypdf import PdfReader
 import docx
-
-from groq import Groq
-from google import genai
-
-import config
+import re
 import supabase_utils
-
-
-
-# ============================================================
-# إصلاح المعادلات
-# ============================================================
+import config
 
 def fix_latex(text):
-
-    replacements = {
-        r"\[": "$$",
-        r"\]": "$$",
-        r"\begin{cases}": "",
-        r"\end{cases}": "",
-        r"\bigr]": "",
-        r"\bigl[": ""
-    }
-
-    for a,b in replacements.items():
-        text = text.replace(a,b)
-
-
-    symbols = [
-        r"\Theta",
-        r"\alpha",
-        r"\beta",
-        r"\gamma",
-        r"\mu",
-        r"\tau",
-        r"\eta"
-    ]
-
-
-    for symbol in symbols:
-
-        text = re.sub(
-            r"(?<!\$)"
-            + re.escape(symbol)
-            +
-            r"(?!\$)",
-            lambda m: f"${symbol}$",
-            text
-        )
-
-
+    # إصلاح المعادلات الرياضية لظهور جميل
+    text = text.replace(r"\[", "$$").replace(r"\]", "$$")
+    greek = [r"\Theta", r"\eta", r"\beta", r"\gamma", r"\mu", r"\tau"]
+    for g in greek:
+        text = re.sub(r'(?<!\$)' + re.escape(g) + r'(?!\$)', lambda m: f'${g}$', text)
     return text
 
-
-
-# ============================================================
-# قراءة الملفات
-# ============================================================
-
-def extract_file(uploaded_file):
-
-    text = ""
-
+def extract_file(file):
     try:
+        if file.name.endswith(".pdf"):
+            return "".join([p.extract_text() for p in PdfReader(file).pages])
+        elif file.name.endswith(".docx"):
+            return "\n".join([p.text for p in docx.Document(file).paragraphs])
+        elif file.name.endswith(".xlsx"):
+            return pd.read_excel(file).to_string()
+        elif file.name.endswith((".csv", ".txt")):
+            return file.read().decode("utf-8")
+    except Exception as e: return f"خطأ في قراءة الملف: {e}"
+    return ""
 
-        if uploaded_file.name.endswith(".pdf"):
-
-            reader = PdfReader(uploaded_file)
-
-            for page in reader.pages:
-                text += page.extract_text() or ""
-
-
-        elif uploaded_file.name.endswith(".docx"):
-
-            document = docx.Document(
-                uploaded_file
-            )
-
-            for p in document.paragraphs:
-                text += p.text + "\n"
-
-
-        elif uploaded_file.name.endswith(".xlsx"):
-
-            df = pd.read_excel(
-                uploaded_file
-            )
-
-            text = df.to_string()
-
-
-        elif uploaded_file.name.endswith(
-            (".csv",".txt")
-        ):
-
-            text = uploaded_file.read().decode(
-                "utf-8"
-            )
-
-
-    except Exception as e:
-
-        text = f"خطأ قراءة الملف: {e}"
-
-
-    return text[:5000]
-
-
-
-# ============================================================
-# الصفحة الرئيسية
-# ============================================================
-
-def chat_page():
-
-    st.title(
-        "💬 HYDROMEM Chat AI"
-    )
-
-
-    if "messages" not in st.session_state:
-        st.session_state.messages=[]
-
-
-    if "current_session_id" not in st.session_state:
-        st.session_state.current_session_id=None
-
-
-
-    # --------------------------------------------------------
-    # الشريط الجانبي
-    # --------------------------------------------------------
+def render():
+    st.title("💬 HYDROMEM Chat AI")
+    if "messages" not in st.session_state: st.session_state.messages = []
+    if "session_id" not in st.session_state: st.session_state.session_id = None
 
     with st.sidebar:
-
-
-        st.subheader(
-            "⚙️ الإعدادات"
-        )
-
-
-        model = st.selectbox(
-            "المحرك",
-            [
-                "Groq",
-                "Gemini"
-            ]
-        )
-
-
-        persona = st.selectbox(
-            "نوع المساعد",
-            list(
-                config.PERSONAS.keys()
-            )
-        )
-
-
+        st.subheader("⚙️ الإعدادات")
+        model = st.selectbox("المحرك", ["Groq (سريع)", "Gemini (صور وملفات)"])
+        persona = st.selectbox("نوع المساعد", list(config.PERSONAS.keys()))
         st.divider()
-
-
-        uploaded_file = st.file_uploader(
-            "📎 رفع ملف",
-            type=config.SUPPORTED_FILES
-        )
-
-
+        uploaded_file = st.file_uploader("📎 رفع ملف", type=config.SUPPORTED_FILES)
         st.divider()
-
-
-        st.subheader(
-            "📚 المحادثات السابقة"
-        )
-
-
-        user_email = (
-            st.session_state
-            .user
-            .get("email")
-        )
-
-
-        sessions = (
-            supabase_utils
-            .get_chat_sessions(
-                user_email
-            )
-        )
-
-
-        for s in sessions:
-
-            if st.button(
-                s["title"],
-                key=s["id"]
-            ):
-
-                old = (
-                    supabase_utils
-                    .get_chat_session_by_id(
-                        s["id"]
-                    )
-                )
-
+        st.subheader("📚 المحادثات السابقة")
+        
+        email = st.session_state.user.get("email")
+        for s in supabase_utils.get_chats(email):
+            if st.button(s["title"][:20]+"...", key=s["id"]):
+                old = supabase_utils.get_chat_by_id(s["id"])
                 if old:
-
                     st.session_state.messages = old["messages"]
-
-                    st.session_state.current_session_id = old["id"]
-
+                    st.session_state.session_id = old["id"]
                     st.rerun()
-
-
-
-        if st.button(
-            "➕ محادثة جديدة"
-        ):
-
-            st.session_state.messages=[]
-
-            st.session_state.current_session_id=None
-
+        if st.button("➕ محادثة جديدة"):
+            st.session_state.messages = []
+            st.session_state.session_id = None
             st.rerun()
 
+    # عرض الرسائل
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-
-    # --------------------------------------------------------
-    # عرض المحادثة
-    # --------------------------------------------------------
-
-    for message in st.session_state.messages:
-
-        with st.chat_message(
-            message["role"]
-        ):
-
-            st.markdown(
-                message["content"]
-            )
-
-
-
-    # --------------------------------------------------------
-    # سؤال المستخدم
-    # --------------------------------------------------------
-
-    if prompt := st.chat_input(
-        "اكتب سؤالك..."
-    ):
-
-
-        file_text=""
-
-        if uploaded_file:
-
-            if not uploaded_file.type.startswith(
-                "image/"
-            ):
-
-                file_text = extract_file(
-                    uploaded_file
-                )
-
-
-
+    # الإدخال
+    if prompt := st.chat_input("اكتب سؤالك هنا..."):
         full_prompt = prompt
+        if uploaded_file and not uploaded_file.type.startswith("image/"):
+            full_prompt += f"\n\n[محتوى الملف]:\n{extract_file(uploaded_file)}"
 
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.markdown(prompt)
 
-        if file_text:
-
-            full_prompt += (
-                "\n\nمحتوى الملف:\n"
-                +
-                file_text
-            )
-
-
-
-        st.session_state.messages.append(
-            {
-                "role":"user",
-                "content":prompt
-            }
-        )
-
-
-        with st.chat_message(
-            "user"
-        ):
-
-            st.markdown(prompt)
-
-
-
-        # ----------------------------------------------------
-        # الذكاء الاصطناعي
-        # ----------------------------------------------------
-
-        with st.chat_message(
-            "assistant"
-        ):
-
-
-            with st.spinner(
-                "🧠 جاري التحليل..."
-            ):
-
-
-                answer=""
-
-
-                system = f"""
-                {config.PERSONAS[persona]}
-
-                أجب باللغة العربية.
-
-                استخدم:
-                $$ للمعادلات المستقلة
-
-                $ للرموز الرياضية.
-
-                اختم الإجابة بالخلاصة.
-                """
-
-
-
+        with st.chat_message("assistant"):
+            with st.spinner("🧠 جاري التحليل..."):
+                answer = ""
+                system = f"{config.PERSONAS[persona]}\nأجب باللغة العربية. استخدم $$ للمعادلات. اختم بـ (الخلاصة)."
                 try:
-
-
-                    if model=="Groq":
-
-
-                        client = Groq(
-                            api_key=config.GROQ_API_KEY
+                    if model.startswith("Groq") and config.GROQ_API_KEY:
+                        from groq import Groq
+                        client = Groq(api_key=config.GROQ_API_KEY)
+                        res = client.chat.completions.create(
+                            model=config.GROQ_MODELS[0], max_tokens=4096,
+                            messages=[{"role": "system", "content": system}, {"role": "user", "content": full_prompt}]
                         )
-
-
-                        result = (
-                            client.chat.completions.create(
-                                model=config.GROQ_MODELS[0],
-                                messages=[
-                                    {
-                                    "role":"system",
-                                    "content":system
-                                    },
-                                    {
-                                    "role":"user",
-                                    "content":full_prompt
-                                    }
-                                ],
-                                max_tokens=4096
-                            )
-                        )
-
-
-                        answer = (
-                            result
-                            .choices[0]
-                            .message
-                            .content
-                        )
-
-
-
-                    else:
-
-
-                        client = genai.Client(
-                            api_key=config.GEMINI_API_KEY
-                        )
-
-
-                        content=[
-                            full_prompt
-                        ]
-
-
+                        answer = res.choices[0].message.content
+                    elif config.GEMINI_API_KEY:
+                        from google import genai
+                        client = genai.Client(api_key=config.GEMINI_API_KEY)
+                        contents = [full_prompt]
                         if uploaded_file and uploaded_file.type.startswith("image/"):
-
-                            content.append(
-                                Image.open(
-                                    uploaded_file
-                                )
-                            )
-
-
-                        result = (
-                            client
-                            .models
-                            .generate_content(
-                                model=config.GEMINI_MODEL,
-                                contents=content
-                            )
-                        )
-
-
-                        answer=result.text
-
-
-
+                            contents.append(Image.open(uploaded_file))
+                        res = client.models.generate_content(model=config.GEMINI_MODEL, contents=contents)
+                        answer = res.text
+                    else:
+                        answer = "الرجاء التأكد من مفاتيح API في الإعدادات."
                 except Exception as e:
+                    answer = f"حدث خطأ: {e}"
 
-                    answer=f"خطأ: {e}"
-
-
-
-                answer=fix_latex(
-                    answer
-                )
-
-
-                st.markdown(
-                    answer
-                )
-
-
-        st.session_state.messages.append(
-            {
-                "role":"assistant",
-                "content":answer
-            }
-        )
-
-
-
-        title = (
-            st.session_state
-            .messages[0]
-            ["content"][:40]
-        )
-
-
-        sid = (
-            supabase_utils
-            .save_chat_session(
-                user_email,
-                title,
-                st.session_state.messages,
-                st.session_state.current_session_id
-            )
-        )
-
-
-        if sid:
-
-            st.session_state.current_session_id=sid
+                st.markdown(fix_latex(answer))
+        
+        st.session_state.messages.append({"role": "assistant", "content": fix_latex(answer)})
+        # حفظ المحادثة
+        title = st.session_state.messages[0]["content"][:40]
+        st.session_state.session_id = supabase_utils.save_chat(email, title, st.session_state.messages, st.session_state.session_id)
