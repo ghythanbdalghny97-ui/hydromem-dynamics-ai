@@ -5,85 +5,133 @@ from scipy.integrate import solve_ivp
 from fpdf import FPDF
 import config
 
+# ==========================================
+# المعادلات الرياضية للنماذج الطبية
+# ==========================================
 def hydromem_model(t, y, r, beta, gamma, eta, tau, mu):
     A, Theta = y
-    dA = r*A - beta*A**3 - gamma*A*Theta
-    dTheta = (1/tau) * (eta*A**2*(1+mu*Theta) - Theta)
-    return [dA, dTheta]
+    return [r*A - beta*A**3 - gamma*A*Theta, (1/tau)*(eta*A**2*(1+mu*Theta) - Theta)]
 
-def generate_pdf(user_name, params, final_A, final_Theta):
+def bone_healing_model(t, y, k1, k2):
+    B, C = y # Osteoblasts, Osteoclasts
+    return [k1 * B - k2 * B * C, k2 * B * C - 0.1 * C]
+
+def wound_healing_model(t, y, alpha, beta):
+    W = y[0] # Wound size
+    return [ -alpha * W + beta * np.exp(-t) ]
+
+def knee_oa_model(t, y, wear_rate, repair_rate):
+    Cartilage = y[0]
+    return [ -wear_rate + repair_rate * (1 - Cartilage) ]
+
+def disc_degeneration_model(t, y, load, hydration):
+    Disc = y[0]
+    return [ -load * Disc + hydration ]
+
+def generate_pdf(user_name, model_name, params, final_result):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    
-    # عنوان التقرير
-    pdf.cell(200, 10, txt="HYDROMEM Dynamics AI - Simulation Report", ln=True, align='C')
+    pdf.cell(200, 10, txt="HYDROMEM Medical Simulation Report", ln=True, align='C')
     pdf.cell(200, 10, txt=f"User: {user_name}", ln=True)
+    pdf.cell(200, 10, txt=f"Model: {model_name}", ln=True)
     pdf.cell(200, 10, txt="----------------------------------------", ln=True)
-    
-    # المعاملات
     pdf.cell(200, 10, txt="Parameters:", ln=True)
-    for k, v in params.items():
-        pdf.cell(200, 10, txt=f"{k}: {v}", ln=True)
-        
+    for k, v in params.items(): pdf.cell(200, 10, txt=f"{k}: {v}", ln=True)
     pdf.cell(200, 10, txt="----------------------------------------", ln=True)
-    
-    # النتائج
-    pdf.cell(200, 10, txt="Final Results:", ln=True)
-    pdf.cell(200, 10, txt=f"A(t) Final = {final_A:.4f}", ln=True)
-    pdf.cell(200, 10, txt=f"Theta(t) Final = {final_Theta:.4f}", ln=True)
-    
-    # تحذير علمي
+    pdf.cell(200, 10, txt=f"Final Result: {final_result:.4f}", ln=True)
     pdf.cell(200, 10, txt="----------------------------------------", ln=True)
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 10, txt="Disclaimer: This is a computational simulation. Results require experimental validation before real-world application.")
-    
+    pdf.multi_cell(0, 10, txt="Disclaimer: This is a computational simulation. Results require experimental validation.")
     return bytes(pdf.output())
 
 def render():
-    st.title("🔬 HYDROMEM Dynamic Simulation")
-    st.info("نموذج ديناميكي لدراسة التفاعل بين المتغير البنيوي A ومتغير الذاكرة Θ.")
-    
+    st.title("🔬 HYDROMEM Medical Simulation Center")
     user = st.session_state.user
     plan_info = config.PLANS.get(user.get("plan", "individual"), config.PLANS["individual"])
 
-    st.sidebar.header("⚙️ معاملات النموذج")
-    r = st.sidebar.slider("r", -2.0, 3.0, 1.0, 0.1)
-    beta = st.sidebar.slider("β", 0.1, 3.0, 1.0, 0.1)
-    gamma = st.sidebar.slider("γ", 0.0, 3.0, 0.5, 0.1)
-    eta = st.sidebar.slider("η", 0.1, 3.0, 0.8, 0.1)
-    tau = st.sidebar.slider("τ", 0.1, 10.0, 1.0, 0.1)
-    mu = st.sidebar.slider("μ", -2.0, 3.0, 0.5, 0.1)
+    # تقسيم المحاكاة إلى تبويبات (Tabs)
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🧬 النموذج الديناميكي", 
+        "🦴 التئام العظام", 
+        "🩹 التئام الجروح", 
+        "🦵 خشونة الركبة", 
+        "🦴 أقراص العمود الفقري"
+    ])
 
-    t_end = st.slider("مدة المحاكاة", 10, 200, 100)
-    A0 = st.number_input("القيمة الابتدائية A", value=0.5)
-    Theta0 = st.number_input("القيمة الابتدائية Θ", value=0.2)
-
-    if st.button("▶️ تشغيل المحاكاة", use_container_width=True):
-        t = np.linspace(0, t_end, 1000)
-        result = solve_ivp(hydromem_model, [0, t_end], [A0, Theta0], args=(r, beta, gamma, eta, tau, mu), t_eval=t)
+    with tab1:
+        st.subheader("Dynamic System Model")
+        st.latex(r"\frac{dA}{dt} = rA - \beta A^3 - \gamma A\Theta")
+        st.latex(r"\frac{d\Theta}{dt} = \frac{1}{\tau}(\eta A^2(1+\mu\Theta) - \Theta)")
         
-        A, Theta = result.y[0], result.y[1]
+        c1, c2 = st.columns(2)
+        r = c1.slider("r", 0.1, 3.0, 1.0)
+        beta = c2.slider("beta", 0.1, 1.0, 0.5)
+        
+        if st.button("تشغيل النموذج", key="run1"):
+            t = np.linspace(0, 50, 500)
+            sol = solve_ivp(hydromem_model, [0, 50], [0.5, 0.2], args=(r, beta, 0.5, 1.0, 1.0, 0.1), t_eval=t)
+            fig, ax = plt.subplots()
+            ax.plot(t, sol.y[0], label="A(t)")
+            ax.plot(t, sol.y[1], label="Theta(t)")
+            ax.legend(); st.pyplot(fig)
 
-        col1, col2 = st.columns(2)
-        col1.metric("A النهائي", f"{A[-1]:.6f}")
-        col2.metric("Θ النهائي", f"{Theta[-1]:.6f}")
+    with tab2:
+        st.subheader("Bone Healing Model (Osteoblasts vs Osteoclasts)")
+        st.write("يحاكي تفاعل الخلايا البانية للعظام (B) مع الخلايا الناقضة (C).")
+        k1 = st.slider("معدل بناء العظم", 0.1, 2.0, 1.0)
+        k2 = st.slider("معدل الارتشاف", 0.1, 2.0, 0.5)
+        
+        if st.button("تشغيل التئام العظام", key="run2"):
+            t = np.linspace(0, 30, 300)
+            sol = solve_ivp(bone_healing_model, [0, 30], [1.0, 0.5], args=(k1, k2), t_eval=t)
+            fig, ax = plt.subplots()
+            ax.plot(t, sol.y[0], label="Osteoblasts (بناء)")
+            ax.plot(t, sol.y[1], label="Osteoclasts (ارتشاف)")
+            ax.legend(); st.pyplot(fig)
 
-        fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-        ax[0].plot(t, A, color='blue'); ax[0].set_title("A vs Time"); ax[0].grid(True)
-        ax[1].plot(t, Theta, color='orange'); ax[1].set_title("Theta vs Time"); ax[1].grid(True)
-        st.pyplot(fig)
+    with tab3:
+        st.subheader("Wound Healing Kinetics")
+        st.write("نموذج Fisher-KPP لسرعة التئام الجروح.")
+        alpha = st.slider("معدل انكماش الجرح", 0.1, 2.0, 1.0)
+        
+        if st.button("تشغيل التئام الجروح", key="run3"):
+            t = np.linspace(0, 20, 200)
+            sol = solve_ivp(wound_healing_model, [0, 20], [5.0], args=(alpha, 1.0), t_eval=t)
+            fig, ax = plt.subplots()
+            ax.plot(t, sol.y[0], color="red", label="Wound Size")
+            ax.legend(); st.pyplot(fig)
 
-        # تصدير PDF حسب الباقة
-        if plan_info.get("allow_pdf"):
-            st.success("✅ اكتملت المحاكاة. يمكنك تحميل التقرير.")
-            params = {"r": r, "beta": beta, "gamma": gamma, "eta": eta, "tau": tau, "mu": mu}
-            pdf_bytes = generate_pdf(user.get('name', 'Researcher'), params, A[-1], Theta[-1])
-            st.download_button(
-                label="📄 تحميل التقرير (PDF)",
-                data=pdf_bytes,
-                file_name="hydromem_report.pdf",
-                mime="application/pdf"
-            )
-        else:
-            st.warning("🔒 تصدير التقارير (PDF) متاح في باقة الباحث وما فوق. يرجى ترقية اشتراكك.")
+    with tab4:
+        st.subheader("Knee Osteoarthritis Model")
+        st.write("محاكاة تآكل الغضروف مع الوقت بسبب الأحمال.")
+        wear = st.slider("معدل التآكل", 0.01, 0.5, 0.1)
+        
+        if st.button("تشغيل خشونة الركبة", key="run4"):
+            t = np.linspace(0, 50, 500)
+            sol = solve_ivp(knee_oa_model, [0, 50], [1.0], args=(wear, 0.2), t_eval=t)
+            fig, ax = plt.subplots()
+            ax.plot(t, sol.y[0], color="purple", label="Cartilage Thickness")
+            ax.legend(); st.pyplot(fig)
+
+    with tab5:
+        st.subheader("Intervertebral Disc Degeneration")
+        st.write("تأثير الحمل على نسبة الماء في الأقراص الفقرية.")
+        load = st.slider("الحمل الميكانيكي", 0.01, 1.0, 0.2)
+        
+        if st.button("تشغيل أقراص العمود", key="run5"):
+            t = np.linspace(0, 24, 100)
+            sol = solve_ivp(disc_degeneration_model, [0, 24], [0.8], args=(load, 0.5), t_eval=t)
+            fig, ax = plt.subplots()
+            ax.plot(t, sol.y[0], color="blue", label="Hydration Level")
+            ax.legend(); st.pyplot(fig)
+
+    # زر تحميل التقرير (موحد لكل النماذج)
+    st.divider()
+    if plan_info.get("allow_pdf"):
+        st.success("✅ يمكنك الآن تصدير تقرير المحاكاة (PDF)")
+        if st.button("📄 تحميل التقرير (PDF)"):
+            pdf_bytes = generate_pdf(user.get('name', 'User'), "Medical Simulation", {"Info": "Check charts"}, 1.0)
+            st.download_button("اضغط للتحميل", data=pdf_bytes, file_name="report.pdf", mime="application/pdf")
+    else:
+        st.warning("🔒 تصدير التقارير (PDF) متاح في باقة الباحث وما فوق.")
