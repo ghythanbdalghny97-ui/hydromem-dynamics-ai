@@ -1,150 +1,51 @@
 import hashlib
-import streamlit as st
-from datetime import datetime, timedelta
 import uuid
+from datetime import datetime, timedelta
+import supabase_utils
+import config
 
-def _get_client():
-    try:
-        from supabase import create_client
-    except ImportError:
-        return None
-    url = st.secrets.get("SUPABASE_URL", "").strip()
-    key = st.secrets.get("SUPABASE_KEY", "").strip()
-    if not url or not key: return None
-    try: return create_client(url, key)
-    except Exception: return None
+def hash_pwd(pwd): return hashlib.sha256(pwd.encode()).hexdigest()
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-# ==========================================
-# المستخدمون
-# ==========================================
-def register_user_db(email, password, name, account_type, org=None):
-    client = _get_client()
-    if not client: return False, "فشل الاتصال بقاعدة البيانات."
-    try:
-        if client.table("users").select("email").eq("email", email.lower()).execute().data:
-            return False, "هذا البريد مسجل مسبقاً."
-        data = {
-            "email": email.lower(), "password_hash": hash_password(password),
-            "name": name, "account_type": account_type, "organization": org, "plan": account_type
-        }
-        client.table("users").insert(data).execute()
+def register(email, pwd, name, account_type):
+    if supabase_utils.get_user_by_email(email):
+        return False, "البريد مسجل مسبقاً."
+    if len(pwd) < 8:
+        return False, "كلمة المرور يجب أن تكون 8 أحرف على الأقل."
+    
+    user = {
+        "email": email.lower(), "password_hash": hash_pwd(pwd),
+        "name": name, "account_type": account_type, "plan": account_type
+    }
+    if supabase_utils.create_user(user):
         return True, "تم إنشاء الحساب بنجاح."
-    except Exception as e: return False, f"خطأ: {e}"
+    return False, "حدث خطأ في الاتصال بقاعدة البيانات."
 
-def login_user_db(email, password):
-    client = _get_client()
-    if not client: return None
-    try:
-        pwd_hash = hash_password(password)
-        res = client.table("users").select("*").eq("email", email.lower()).eq("password_hash", pwd_hash).execute()
-        return res.data[0] if res.data else None
-    except Exception: return None
+def login(email, pwd):
+    user = supabase_utils.get_user_by_email(email)
+    if user and user.get("password_hash") == hash_pwd(pwd):
+        return user
+    return None
 
-def get_user_by_email(email):
-    client = _get_client()
-    if not client: return None
-    try:
-        res = client.table("users").select("*").eq("email", email.lower()).execute()
-        return res.data[0] if res.data else None
-    except Exception: return None
+def generate_token(email):
+    token = str(uuid.uuid4())
+    expiry = (datetime.utcnow() + timedelta(days=config.TOKEN_VALID_DAYS)).isoformat()
+    supabase_utils.update_user(email, {"remember_token": token, "token_expiry": expiry})
+    return token
 
-def generate_remember_token(email):
-    client = _get_client()
-    if not client: return None
-    try:
-        token = str(uuid.uuid4())
-        client.table("users").update({"remember_token": token}).eq("email", email.lower()).execute()
-        return token
-    except Exception: return None
+def submit_payment(email, plan, amount, ref):
+    if supabase_utils.create_payment(email, plan, amount, ref):
+        return True, "تم إرسال طلب الدفع بنجاح. بانتظار الإدارة."
+    return False, "فشل في إرسال الطلب."
 
-def login_with_token(token):
-    client = _get_client()
-    if not client: return None
-    try:
-        res = client.table("users").select("*").eq("remember_token", token).execute()
-        return res.data[0] if res.data else None
-    except Exception: return None
-
-def update_user_plan(email, new_plan, expiry_date=None):
-    client = _get_client()
-    if not client: return False
-    try:
-        data = {"plan": new_plan}
-        if expiry_date: data["expiry_date"] = expiry_date
-        client.table("users").update(data).eq("email", email.lower()).execute()
+def approve_payment(payment_id, email, plan):
+    # تحديث حالة الدفع وتحديث باقة المستخدم ونوع الحساب
+    expiry = (datetime.utcnow() + timedelta(days=30)).isoformat()
+    success = supabase_utils.update_user(email, {"plan": plan, "account_type": plan, "expiry_date": expiry})
+    if success:
+        try:
+            from supabase import create_client
+            client = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
+            client.table("payments").update({"status": "approved"}).eq("id", payment_id).execute()
+        except: pass
         return True
-    except Exception: return False
-
-# ==========================================
-# الدفع (تم إصلاحها هنا لترجع قيمتين)
-# ==========================================
-def submit_payment_request(email, plan, amount, receipt_ref):
-    client = _get_client()
-    if not client: return False, "فشل الاتصال."
-    try:
-        data = {
-            "user_email": email.lower(), 
-            "plan": plan, 
-            "amount": float(amount),
-            "receipt_ref": str(receipt_ref), 
-            "status": "pending"
-        }
-        client.table("payments").insert(data).execute()
-        return True, "تم إرسال الطلب بنجاح. بانتظار موافقة الإدارة."
-    except Exception as e: 
-        return False, f"خطأ في حفظ الطلب: {e}"
-
-def get_pending_payments():
-    client = _get_client()
-    if not client: return []
-    try:
-        return client.table("payments").select("*").eq("status", "pending").order("created_at", desc=True).execute().data or []
-    except Exception: return []
-
-def approve_payment(payment_id, user_email, plan):
-    client = _get_client()
-    if not client: return False
-    try:
-        client.table("payments").update({"status": "approved"}).eq("id", payment_id).execute()
-        expiry = (datetime.now() + timedelta(days=30)).isoformat()
-        update_user_plan(user_email, plan, expiry)
-        return True
-    except Exception: return False
-
-# ==========================================
-# إدارة الفريق
-# ==========================================
-def add_team_member(owner_email, name, email, password, role, max_users):
-    client = _get_client()
-    if not client: return False, "فشل الاتصال."
-    try:
-        owner = get_user_by_email(owner_email)
-        team_id = owner.get("team_id") or owner["id"]
-        if not owner.get("team_id"):
-            client.table("users").update({"team_id": team_id}).eq("email", owner_email.lower()).execute()
-        
-        members = client.table("users").select("id").eq("team_id", team_id).execute()
-        if len(members.data) >= max_users:
-            return False, f"وصلت للحد الأقصى ({max_users} مستخدمين)."
-        
-        if get_user_by_email(email): 
-            return False, "البريد مسجل مسبقاً."
-            
-        data = {
-            "email": email.lower(), "password_hash": hash_password(password), "name": name,
-            "account_type": owner.get("account_type"), "organization": owner.get("organization"),
-            "plan": owner.get("plan"), "team_id": team_id, "role": role
-        }
-        client.table("users").insert(data).execute()
-        return True, "تمت إضافة العضو بنجاح."
-    except Exception as e: return False, f"خطأ: {e}"
-
-def get_team_members(team_id):
-    client = _get_client()
-    if not client: return []
-    try:
-        return client.table("users").select("name,email,role").eq("team_id", team_id).execute().data or []
-    except Exception: return []
+    return False
