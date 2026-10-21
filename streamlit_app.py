@@ -1,13 +1,14 @@
 import streamlit as st
 import auth_db
 import config
+import os # ضروري للبحث عن الصورة
 
 # ==========================================
 # إعدادات الصفحة
 # ==========================================
 st.set_page_config(
     page_title="HYDROMEM Medical AI", 
-    page_icon="logo.png", 
+    page_icon="🧬", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -81,13 +82,18 @@ if "show_login" not in st.session_state: st.session_state.show_login = False
 def landing_page():
     load_css()
     
-    # الشعار (تأكد من رفع الصورة باسم logo.png)
+    # 🧠 كود ذكي: يبحث عن أي صورة تحتوي على كلمة "logo" مهما كان امتدادها
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        try:
-            st.image("logo.png", use_container_width=True)
-        except:
-            st.warning("⚠️ يرجى رفع الشعار باسم logo.png إلى المستودع.")
+        logo_found = False
+        for f in os.listdir('.'):
+            if 'logo' in f.lower() and f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+                st.image(f, use_container_width=True)
+                logo_found = True
+                break
+        
+        if not logo_found:
+            st.warning("⚠️ يرجى رفع صورة الشعار (يكفي أن يحتوي الاسم على كلمة logo).")
 
     st.markdown("<h1 class='hero-title'>HYDROMEM Medical AI</h1>", unsafe_allow_html=True)
     st.markdown("<p class='hero-subtitle'>مساعدك الطبي الذكي ومنصة المحاكاة المتقدمة للأنظمة الديناميكية المعقدة</p>", unsafe_allow_html=True)
@@ -185,7 +191,7 @@ def login_page():
                     st.error(msg)
 
 # ==========================================
-# 3. لوحة الإدارة (Admin)
+# 3. لوحة الإدارة
 # ==========================================
 def admin_panel():
     st.title("🔐 لوحة تحكم المسؤول")
@@ -269,7 +275,7 @@ def team_page(user):
             
             if st.form_submit_button("إضافة العضو"):
                 if not m_name or not m_email or len(m_pwd) < 8:
-                    st.error("يرجى إكمال البيانات.")
+                    st.error("يرجى إكمال البيانات (كلمة مرور 8 أحرف على الأقل).")
                 else:
                     ok, msg = auth_db.add_team_member(user['email'], m_name, m_email, m_pwd, m_role)
                     if ok:
