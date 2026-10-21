@@ -2,6 +2,9 @@ import streamlit as st
 import auth_db
 import config
 
+# ==========================================
+# إعدادات الصفحة (يجب أن تكون أول أمر)
+# ==========================================
 st.set_page_config(page_title="HYDROMEM Dynamics AI", page_icon="🧬", layout="wide")
 
 # ==========================================
@@ -9,9 +12,10 @@ st.set_page_config(page_title="HYDROMEM Dynamics AI", page_icon="🧬", layout="
 # ==========================================
 if "user" not in st.session_state: st.session_state.user = None
 if "admin_verified" not in st.session_state: st.session_state.admin_verified = False
+if "show_login" not in st.session_state: st.session_state.show_login = False
 
 # ==========================================
-# الدخول التلقائي
+# الدخول التلقائي (عبر التوكن)
 # ==========================================
 if not st.session_state.user:
     token = st.query_params.get("token")
@@ -20,13 +24,61 @@ if not st.session_state.user:
         user = get_user_by_token(token)
         if user:
             st.session_state.user = user
+            st.session_state.show_login = True # تخطي صفحة الهبوط إذا دخل تلقائياً
             st.rerun()
 
 # ==========================================
-# صفحة الدخول والتسجيل
+# 1. صفحة الهبوط (Landing Page) - تظهر للزوار
+# ==========================================
+def landing_page():
+    st.title("🧬 HYDROMEM Dynamics AI")
+    st.subheader("مساعدك الطبي الذكي ومنصة المحاكاة المتقدمة للأنظمة الديناميكية")
+    st.write("---")
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.write("### لماذا HYDROMEM؟")
+        st.markdown("""
+        * **بيئة عمل متكاملة:** لا نكتفي بكتابة الكود، بل **ننفذه** ونرسم المنحنيات ونستخرج الأرقام.
+        * **نماذج طبية:** محاكاة التئام العظام، الجروح، والركبة.
+        * **تحليل الملفات:** ارفع PDF أو Excel ودع الذكاء الاصطناعي يحلله.
+        * **تقارير PDF:** احصل على تقارير جاهزة للنشر في الأبحاث العلمية.
+        * **دعم مؤسسي:** إدارة الفريق والصلاحيات للجامعات والمختبرات.
+        """)
+    with col2:
+        st.info("💡 **جرّب مجاناً:** يمكنك التسجيل الآن والحصول على تجربة محدودة (الباقة الفردية).")
+
+    st.write("---")
+    st.subheader("💎 باقات الاشتراك")
+    
+    cols = st.columns(3)
+    plans_to_show = ["individual", "researcher", "laboratory"]
+    for i, pid in enumerate(plans_to_show):
+        p = config.PLANS[pid]
+        with cols[i]:
+            st.markdown(f"### {p['name']}")
+            st.write(f"**${p['price_m']} / شهر**")
+            for f in p['features'][:3]:
+                st.write(f"✅ {f}")
+            if st.button(f"اشترك في {p['name']}", key=f"btn_{pid}", use_container_width=True):
+                st.session_state.show_login = True
+                st.rerun()
+
+    st.write("---")
+    if st.button("🔐 الدخول / إنشاء حساب", use_container_width=True, type="primary"):
+        st.session_state.show_login = True
+        st.rerun()
+
+# ==========================================
+# 2. صفحة الدخول والتسجيل
 # ==========================================
 def login_page():
     st.title("🧬 HYDROMEM Dynamics AI")
+    
+    if st.button("⬅️ العودة للصفحة الرئيسية"):
+        st.session_state.show_login = False
+        st.rerun()
+        
     tab1, tab2 = st.tabs(["🔐 دخول", "📝 تسجيل جديد"])
     
     with tab1:
@@ -56,7 +108,7 @@ def login_page():
                 else: st.error(msg)
 
 # ==========================================
-# لوحة الإدارة
+# 3. لوحة الإدارة
 # ==========================================
 def admin_panel():
     st.title("🔐 لوحة تحكم المسؤول")
@@ -79,7 +131,7 @@ def admin_panel():
                     st.rerun()
 
 # ==========================================
-# الصفحات
+# 4. صفحات المستخدم
 # ==========================================
 def home_page(user):
     st.title("🏠 HYDROMEM Dashboard")
@@ -127,17 +179,23 @@ def team_page(user):
     st.info("يمكنك إضافة أعضاء الفريق هنا (قيد التطوير قليلاً).")
 
 # ==========================================
-# التطبيق الرئيسي والراوتر
+# 5. التطبيق الرئيسي والراوتر
 # ==========================================
 def main():
+    # 1. إذا لم يكن هناك مستخدم
     if not st.session_state.user:
-        login_page()
+        if st.session_state.show_login:
+            login_page() # عرض صفحة الدخول
+        else:
+            landing_page() # عرض صفحة الهبوط
         return
         
+    # 2. إذا كان مديراً
     if st.session_state.admin_verified:
         admin_panel()
         return
         
+    # 3. إذا كان مستخدماً مسجلاً
     user = st.session_state.user
     plan_info = config.PLANS.get(user.get("plan", "individual"), config.PLANS["individual"])
 
@@ -155,6 +213,7 @@ def main():
         
         if st.button("🚪 تسجيل الخروج"):
             st.session_state.user = None
+            st.session_state.show_login = False
             if "token" in st.query_params: del st.query_params["token"]
             st.rerun()
             
