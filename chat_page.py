@@ -16,10 +16,10 @@ import config
 from gtts import gTTS
 
 # ==========================================
-# 1. محرك تنفيذ الأكواد واستخراج النتائج (تم إصلاحه)
+# 1. محرك تنفيذ الأكواد واستخراج النتائج
 # ==========================================
 def execute_python_code(code):
-    # 🌟 السر هنا: نستخدم قاموساً واحداً كـ (Globals و Locals) لكي ترى الدوال المتغيرات
+    # بيئة موحدة لضمان رؤية الدوال للمتغيرات
     exec_env = {"np": np, "plt": plt, "scipy": scipy, "pd": pd}
     stdout = io.StringIO()
     figs = []
@@ -33,20 +33,25 @@ def execute_python_code(code):
 
     try:
         with contextlib.redirect_stdout(stdout):
-            # تنفيذ الكود في البيئة الموحدة
             exec(code, exec_env)
 
-        # استخراج الأرقام والجداول النهائية
-        valid_vars = {}
-        for k, v in exec_env.items():
-            if k.startswith('_') or k in ["np", "plt", "scipy", "pd"]:
-                continue
-            if isinstance(v, (int, float, str, bool, list, tuple, np.ndarray, pd.DataFrame)):
-                if isinstance(v, np.ndarray) and v.size > 100:
-                    continue # تجاهل المصفوفات الضخمة
-                valid_vars[k] = v
+        # 🌟 استخراج النتائج فقط من قاموس final_results (إذا وجد)
+        final_results_dict = exec_env.get("final_results", {})
+        
+        # إذا لم يضع الذكاء الاصطناعي قاموساً، نبحث عن المتغيرات النهائية فقط ونتجاهل المدخلات
+        if not final_results_dict:
+            valid_vars = {}
+            ignore_list = ["k1", "k2", "k3", "t_start", "t_end", "t_eval", "t_span", "num_pts", "y0", "O0", "C0", "fig", "ax"]
+            for k, v in exec_env.items():
+                if k.startswith('_') or k in ["np", "plt", "scipy", "pd"] or k in ignore_list:
+                    continue
+                if isinstance(v, (int, float, str, bool, list, tuple, np.ndarray, pd.DataFrame)):
+                    if isinstance(v, np.ndarray) and v.size > 100:
+                        continue
+                    valid_vars[k] = v
+            final_results_dict = valid_vars
 
-        return True, stdout.getvalue(), figs, valid_vars
+        return True, stdout.getvalue(), figs, final_results_dict
     except Exception as e:
         return False, str(e), [], {}
     finally:
@@ -88,7 +93,7 @@ def call_ai(full_prompt, system_prompt, model_choice, max_tokens=4096):
         return f"حدث خطأ: {e}"
 
 # ==========================================
-# 2. الأدوات المتقدمة (الترجمة، البروتوكول، إلخ)
+# 2. الأدوات المتقدمة
 # ==========================================
 QUICK_ACTIONS = {
     "🔍 بسّط الشرح": "أعد شرح الإجابة السابقة بأسلوب مبسط جداً لطالب جامعي.",
@@ -153,9 +158,9 @@ def render():
                                 if output.strip():
                                     st.code(output, language="text")
                                 
-                                # عرض المتغيرات والنتائج العددية (جداول أو أرقام)
+                                # عرض النتائج العددية النظيفة
                                 if valid_vars:
-                                    st.write("### 📊 النتائج العددية المستخرجة من الكود:")
+                                    st.write("### 📊 النتائج النهائية:")
                                     for k, v in valid_vars.items():
                                         if isinstance(v, pd.DataFrame):
                                             st.write(f"**{k}:**")
