@@ -104,8 +104,15 @@ def login_page():
             plan = st.selectbox("الباقة", options=list(config.PLANS.keys()), format_func=lambda x: config.PLANS[x]["name"])
             if st.form_submit_button("تسجيل", use_container_width=True):
                 ok, msg = auth_db.register(email, pwd, name, plan)
-                if ok: st.success(msg)
-                else: st.error(msg)
+                if ok:
+                    st.success(msg)
+                    # 🌟 التعديل الجديد: تسجيل الدخول تلقائياً بعد إنشاء الحساب
+                    user = auth_db.login(email, pwd)
+                    if user:
+                        st.session_state.user = user
+                        st.rerun()
+                else: 
+                    st.error(msg)
 
 # ==========================================
 # 3. لوحة الإدارة
