@@ -11,16 +11,16 @@ matplotlib.use('Agg') # ضروري لتشغيل الرسوم في Streamlit
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
-import types
 import supabase_utils
 import config
 from gtts import gTTS
 
 # ==========================================
-# 1. محرك تنفيذ الأكواد واستخراج النتائج
+# 1. محرك تنفيذ الأكواد واستخراج النتائج (تم إصلاحه)
 # ==========================================
 def execute_python_code(code):
-    local_vars = {}
+    # 🌟 السر هنا: نستخدم قاموساً واحداً كـ (Globals و Locals) لكي ترى الدوال المتغيرات
+    exec_env = {"np": np, "plt": plt, "scipy": scipy, "pd": pd}
     stdout = io.StringIO()
     figs = []
 
@@ -33,16 +33,18 @@ def execute_python_code(code):
 
     try:
         with contextlib.redirect_stdout(stdout):
-            exec(code, {"np": np, "plt": plt, "scipy": scipy, "pd": pd}, local_vars)
-        
+            # تنفيذ الكود في البيئة الموحدة
+            exec(code, exec_env)
+
         # استخراج الأرقام والجداول النهائية
         valid_vars = {}
-        for k, v in local_vars.items():
+        for k, v in exec_env.items():
+            if k.startswith('_') or k in ["np", "plt", "scipy", "pd"]:
+                continue
             if isinstance(v, (int, float, str, bool, list, tuple, np.ndarray, pd.DataFrame)):
-                if not isinstance(v, (types.ModuleType, type)):
-                    if isinstance(v, np.ndarray) and v.size > 100:
-                        continue # تجاهل المصفوفات الضخمة
-                    valid_vars[k] = v
+                if isinstance(v, np.ndarray) and v.size > 100:
+                    continue # تجاهل المصفوفات الضخمة
+                valid_vars[k] = v
 
         return True, stdout.getvalue(), figs, valid_vars
     except Exception as e:
@@ -86,7 +88,7 @@ def call_ai(full_prompt, system_prompt, model_choice, max_tokens=4096):
         return f"حدث خطأ: {e}"
 
 # ==========================================
-# 2. الأدوات المتقدمة
+# 2. الأدوات المتقدمة (الترجمة، البروتوكول، إلخ)
 # ==========================================
 QUICK_ACTIONS = {
     "🔍 بسّط الشرح": "أعد شرح الإجابة السابقة بأسلوب مبسط جداً لطالب جامعي.",
