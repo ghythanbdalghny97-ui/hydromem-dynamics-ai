@@ -2,21 +2,13 @@ import streamlit as st
 import auth_db
 import config
 
-# ==========================================
-# إعدادات الصفحة (يجب أن تكون أول أمر)
-# ==========================================
 st.set_page_config(page_title="HYDROMEM Dynamics AI", page_icon="🧬", layout="wide")
 
-# ==========================================
-# تهيئة الجلسة
-# ==========================================
 if "user" not in st.session_state: st.session_state.user = None
 if "admin_verified" not in st.session_state: st.session_state.admin_verified = False
 if "show_login" not in st.session_state: st.session_state.show_login = False
 
-# ==========================================
 # الدخول التلقائي (عبر التوكن)
-# ==========================================
 if not st.session_state.user:
     token = st.query_params.get("token")
     if token:
@@ -24,11 +16,11 @@ if not st.session_state.user:
         user = get_user_by_token(token)
         if user:
             st.session_state.user = user
-            st.session_state.show_login = True # تخطي صفحة الهبوط إذا دخل تلقائياً
+            st.session_state.show_login = True
             st.rerun()
 
 # ==========================================
-# 1. صفحة الهبوط (Landing Page) - تظهر للزوار
+# 1. صفحة الهبوط (Landing Page)
 # ==========================================
 def landing_page():
     st.title("🧬 HYDROMEM Dynamics AI")
@@ -106,7 +98,6 @@ def login_page():
                 ok, msg = auth_db.register(email, pwd, name, plan)
                 if ok:
                     st.success(msg)
-                    # 🌟 التعديل الجديد: تسجيل الدخول تلقائياً بعد إنشاء الحساب
                     user = auth_db.login(email, pwd)
                     if user:
                         st.session_state.user = user
@@ -179,30 +170,54 @@ def team_page(user):
         st.warning("باقتك لا تدعم إدارة الفريق. يرجى الترقية.")
         return
     
-    st.subheader(f"حد المستخدمين: {max_u}")
+    team_id = user.get("team_id") or user["id"]
     from supabase_utils import get_team
-    members = get_team(user.get("team_id") or user["id"])
+    members = get_team(team_id)
+    
+    if not any(m['email'] == user['email'] for m in members):
+        members.insert(0, {"name": user['name'], "email": user['email'], "role": "owner"})
+        
+    st.subheader(f"الأعضاء الحاليون ({len(members)} / {max_u})")
     st.table(members)
-    st.info("يمكنك إضافة أعضاء الفريق هنا (قيد التطوير قليلاً).")
+    
+    st.divider()
+    st.subheader("➕ إضافة عضو جديد")
+    
+    if len(members) >= max_u:
+        st.error("لقد وصلت للحد الأقصى لباقتك.")
+    else:
+        with st.form("add_member"):
+            m_name = st.text_input("اسم العضو")
+            m_email = st.text_input("البريد الإلكتروني")
+            m_pwd = st.text_input("كلمة المرور (8+)", type="password")
+            m_role = st.selectbox("الصلاحية", ["researcher", "viewer", "admin"])
+            
+            if st.form_submit_button("إضافة العضو"):
+                if not m_name or not m_email or len(m_pwd) < 8:
+                    st.error("يرجى إكمال البيانات (كلمة مرور 8 أحرف على الأقل).")
+                else:
+                    ok, msg = auth_db.add_team_member(user['email'], m_name, m_email, m_pwd, m_role)
+                    if ok:
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
 
 # ==========================================
 # 5. التطبيق الرئيسي والراوتر
 # ==========================================
 def main():
-    # 1. إذا لم يكن هناك مستخدم
     if not st.session_state.user:
         if st.session_state.show_login:
-            login_page() # عرض صفحة الدخول
+            login_page()
         else:
-            landing_page() # عرض صفحة الهبوط
+            landing_page()
         return
         
-    # 2. إذا كان مديراً
     if st.session_state.admin_verified:
         admin_panel()
         return
         
-    # 3. إذا كان مستخدماً مسجلاً
     user = st.session_state.user
     plan_info = config.PLANS.get(user.get("plan", "individual"), config.PLANS["individual"])
 
@@ -210,9 +225,8 @@ def main():
         st.title("🧬 HYDROMEM")
         st.success(f"**{user['name']}**\n\nالباقة: {plan_info['name']}")
         
-        # بناء القائمة ديناميكياً حسب الباقة
         menu = ["🏠 الرئيسية", "💬 HYDROMEM Chat", "🔬 المحاكاة", "💳 ترقية الاشتراك"]
-        if plan_info["max_users"] > 1: # إخفاء إدارة الفريق للأفراد
+        if plan_info["max_users"] > 1:
             menu.append("👥 إدارة الفريق")
             
         page = st.radio("القائمة", menu)
@@ -225,13 +239,11 @@ def main():
             st.rerun()
             
         st.divider()
-        # لوحة الإدارة المخفية
         with st.expander("🔒 الإدارة"):
             if st.text_input("المفتاح", type="password") == config.ADMIN_MASTER_KEY:
                 st.session_state.admin_verified = True
                 st.rerun()
 
-    # توجيه للصفحات
     if page == "🏠 الرئيسية": home_page(user)
     elif page == "💬 HYDROMEM Chat":
         import chat_page
