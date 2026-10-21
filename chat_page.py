@@ -17,8 +17,12 @@ import edge_tts
 import supabase_utils
 import config
 
+# تفعيل nest_asyncio ليعمل edge-tts داخل Streamlit
 nest_asyncio.apply()
 
+# ==========================================
+# 1. محرك تنفيذ الأكواد
+# ==========================================
 def execute_python_code(code):
     exec_env = {"np": np, "plt": plt, "scipy": scipy, "pd": pd}
     stdout = io.StringIO()
@@ -54,7 +58,10 @@ def execute_python_code(code):
     finally:
         plt.show = original_show
 
-def speak_text(text, voice_id):
+# ==========================================
+# 2. دالة الصوت
+# ==========================================
+def generate_audio_bytes(text, voice_id):
     clean_text = re.sub(r'\$.*?\$', 'معادلة رياضية', text).replace("#", "").replace("*", "")
     clean_text = clean_text[:3000] 
     
@@ -105,17 +112,20 @@ QUICK_ACTIONS = {
     "🎯 مستويات الثقة": "أعد الإجابة مع تصنيف كل معلومة: (مؤكد / محتمل / افتراضي).",
 }
 
+# ==========================================
+# 3. الواجهة الرئيسية
+# ==========================================
 def render():
     st.title("💬 HYDROMEM Chat AI")
     if "messages" not in st.session_state: st.session_state.messages = []
     if "session_id" not in st.session_state: st.session_state.session_id = None
+    if "audio_cache" not in st.session_state: st.session_state.audio_cache = {}
 
     with st.sidebar:
         st.subheader("⚙️ الإعدادات")
         model_choice = st.selectbox("المحرك", ["Groq (سريع)", "Gemini (صور وملفات)"])
         persona = st.selectbox("نوع المساعد", list(config.PERSONAS.keys()))
         
-        # 🌟 قائمة الأصوات الشاملة (تشمل اللهجة اليمنية والفصحى)
         voices = {
             "🇾🇪 يمني (صنعاء - ذكر)": "ar-YE-SanaNeural",
             "🇾🇪 يمني (صنعاء - أنثى)": "ar-YE-AminaNeural",
@@ -142,17 +152,21 @@ def render():
                 if old:
                     st.session_state.messages = old["messages"]
                     st.session_state.session_id = old["id"]
+                    st.session_state.audio_cache = {} # مسح الكاش عند تغيير المحادثة
                     st.rerun()
         if st.button("➕ محادثة جديدة"):
             st.session_state.messages = []
             st.session_state.session_id = None
+            st.session_state.audio_cache = {}
             st.rerun()
 
+    # عرض الرسائل والأدوات
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
             if msg["role"] == "assistant":
+                # 1. تشغيل الكود
                 code_match = re.search(r"```python\n(.*?)```", msg["content"], re.DOTALL)
                 if code_match:
                     if st.button("⚙️ تشغيل الكود واستخراج النتائج", key=f"run_code_{i}"):
@@ -172,6 +186,7 @@ def render():
                             else:
                                 st.error(f"❌ خطأ في الكود: {output}")
                 
+                # 2. الأدوات المتقدمة
                 with st.expander("🛠️ أدوات متقدمة"):
                     st.write("**حوّل هذا الرد إلى:**")
                     cols = st.columns(3)
@@ -183,18 +198,28 @@ def render():
                                     new_ans = call_ai(f"الإجابة السابقة: {msg['content']}\n\nالمطلوب: {instruction}", sys, model_choice, 2048)
                                     st.session_state.messages.append({"role": "assistant", "content": f"**[{label}]**\n\n{new_ans}"})
                                     st.rerun()
+                    
                     st.divider()
                     col_a, col_b = st.columns(2)
                     with col_a:
-                        if st.button("🔊 استمع للرد", key=f"tts_{i}"):
-                            with st.spinner("جاري الصوت..."):
+                        # 🌟 التعديل الجديد: تخزين الصوت في الكاش أولاً
+                        if st.button("🔊 استمع للرد", key=f"tts_btn_{i}"):
+                            with st.spinner("جاري تحميل الصوت..."):
                                 try: 
-                                    audio_data = speak_text(msg["content"], selected_voice_id)
-                                    st.audio(audio_data, format="audio/mp3")
-                                except Exception as e: st.error(f"تعذر الصوت: {e}")
+                                    audio_data = generate_audio_bytes(msg["content"], selected_voice_id)
+                                    st.session_state.audio_cache[i] = audio_data
+                                    st.rerun() # إعادة التحميل بعد تجهيز الصوت
+                                except Exception as e: 
+                                    st.error(f"تعذر الصوت: {e}")
+                                    
+                        # عرض مشغل الصوت إذا كان موجوداً في الكاش
+                        if i in st.session_state.audio_cache:
+                            st.audio(st.session_state.audio_cache[i], format="audio/mp3")
+                            
                     with col_b:
                         st.code(msg["content"], language="markdown")
 
+    # الإدخال النصي
     if prompt := st.chat_input("اطلب معادلة، محاكاة، أو ارفع ملفاً..."):
         full_prompt = prompt
         if uploaded_file: full_prompt += f"\n\n[محتوى الملف]:\n{extract_file(uploaded_file)}"
