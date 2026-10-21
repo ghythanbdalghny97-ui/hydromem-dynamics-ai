@@ -9,7 +9,9 @@ except Exception as e:
     supabase = None
     st.error(f"خطأ في الاتصال بقاعدة البيانات: {e}")
 
-# ------------ المستخدمون ------------
+# ==========================================
+# المستخدمون
+# ==========================================
 def get_user_by_email(email):
     if not supabase: return None
     res = supabase.table("users").select("*").eq("email", email.lower()).execute()
@@ -34,7 +36,9 @@ def get_user_by_token(token):
     res = supabase.table("users").select("*").eq("remember_token", token).execute()
     return res.data[0] if res.data else None
 
-# ------------ المحادثات ------------
+# ==========================================
+# المحادثات
+# ==========================================
 def save_chat(email, title, messages, session_id=None):
     if not supabase: return None
     data = {"user_email": email, "title": title, "messages": messages, "updated_at": datetime.utcnow().isoformat()}
@@ -54,7 +58,9 @@ def get_chat_by_id(session_id):
     res = supabase.table("chat_sessions").select("*").eq("id", session_id).execute()
     return res.data[0] if res.data else None
 
-# ------------ المدفوعات ------------
+# ==========================================
+# المدفوعات
+# ==========================================
 def create_payment(email, plan, amount, ref):
     if not supabase: return False
     try:
@@ -67,8 +73,28 @@ def get_pending_payments():
     res = supabase.table("payments").select("*").eq("status", "pending").order("created_at", desc=True).execute()
     return res.data or []
 
-# ------------ الفريق ------------
+# ==========================================
+# إدارة الفريق
+# ==========================================
 def get_team(team_id):
     if not supabase: return []
     res = supabase.table("users").select("name,email,role").eq("team_id", team_id).execute()
     return res.data or []
+
+def add_user_to_team(team_id, email, pwd_hash, name, role, plan, account_type):
+    if not supabase: return False
+    try:
+        data = {
+            "email": email.lower(),
+            "password_hash": pwd_hash,
+            "name": name,
+            "role": role,
+            "plan": plan,
+            "account_type": account_type,
+            "team_id": team_id
+        }
+        supabase.table("users").insert(data).execute()
+        return True
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
