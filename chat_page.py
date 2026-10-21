@@ -17,7 +17,7 @@ import edge_tts
 import supabase_utils
 import config
 
-# تفعيل nest_asyncio ليعمل edge-tts داخل Streamlit
+# تفعيل nest_asyncio
 nest_asyncio.apply()
 
 # ==========================================
@@ -59,7 +59,7 @@ def execute_python_code(code):
         plt.show = original_show
 
 # ==========================================
-# 2. دالة الصوت
+# 2. دالة الصوت (بدون تخزين مؤقت معقد)
 # ==========================================
 def generate_audio_bytes(text, voice_id):
     clean_text = re.sub(r'\$.*?\$', 'معادلة رياضية', text).replace("#", "").replace("*", "")
@@ -119,7 +119,6 @@ def render():
     st.title("💬 HYDROMEM Chat AI")
     if "messages" not in st.session_state: st.session_state.messages = []
     if "session_id" not in st.session_state: st.session_state.session_id = None
-    if "audio_cache" not in st.session_state: st.session_state.audio_cache = {}
 
     with st.sidebar:
         st.subheader("⚙️ الإعدادات")
@@ -152,15 +151,13 @@ def render():
                 if old:
                     st.session_state.messages = old["messages"]
                     st.session_state.session_id = old["id"]
-                    st.session_state.audio_cache = {} # مسح الكاش عند تغيير المحادثة
                     st.rerun()
         if st.button("➕ محادثة جديدة"):
             st.session_state.messages = []
             st.session_state.session_id = None
-            st.session_state.audio_cache = {}
             st.rerun()
 
-    # عرض الرسائل والأدوات
+    # عرض الرسائل
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -200,24 +197,14 @@ def render():
                                     st.rerun()
                     
                     st.divider()
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        # 🌟 التعديل الجديد: تخزين الصوت في الكاش أولاً
-                        if st.button("🔊 استمع للرد", key=f"tts_btn_{i}"):
-                            with st.spinner("جاري تحميل الصوت..."):
-                                try: 
-                                    audio_data = generate_audio_bytes(msg["content"], selected_voice_id)
-                                    st.session_state.audio_cache[i] = audio_data
-                                    st.rerun() # إعادة التحميل بعد تجهيز الصوت
-                                except Exception as e: 
-                                    st.error(f"تعذر الصوت: {e}")
-                                    
-                        # عرض مشغل الصوت إذا كان موجوداً في الكاش
-                        if i in st.session_state.audio_cache:
-                            st.audio(st.session_state.audio_cache[i], format="audio/mp3")
-                            
-                    with col_b:
-                        st.code(msg["content"], language="markdown")
+                    if st.button("🔊 استمع للرد", key=f"tts_btn_{i}"):
+                        with st.spinner("جاري تجهيز الصوت..."):
+                            try: 
+                                audio_data = generate_audio_bytes(msg["content"], selected_voice_id)
+                                # عرض الصوت مباشرة هنا بدون إعادة تحميل الصفحة
+                                st.audio(audio_data, format="audio/mp3")
+                            except Exception as e: 
+                                st.error(f"تعذر الصوت: {e}")
 
     # الإدخال النصي
     if prompt := st.chat_input("اطلب معادلة، محاكاة، أو ارفع ملفاً..."):
