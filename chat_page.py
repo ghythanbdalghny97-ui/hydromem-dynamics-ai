@@ -7,19 +7,19 @@ import re
 import io
 import contextlib
 import matplotlib
-matplotlib.use('Agg') # ضروري لتشغيل الرسوم في Streamlit
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
+import asyncio
+import nest_asyncio
+import edge_tts
 import supabase_utils
 import config
-from gtts import gTTS
 
-# ==========================================
-# 1. محرك تنفيذ الأكواد واستخراج النتائج
-# ==========================================
+nest_asyncio.apply()
+
 def execute_python_code(code):
-    # بيئة موحدة لضمان رؤية الدوال للمتغيرات
     exec_env = {"np": np, "plt": plt, "scipy": scipy, "pd": pd}
     stdout = io.StringIO()
     figs = []
@@ -35,10 +35,8 @@ def execute_python_code(code):
         with contextlib.redirect_stdout(stdout):
             exec(code, exec_env)
 
-        # 🌟 استخراج النتائج فقط من قاموس final_results (إذا وجد)
         final_results_dict = exec_env.get("final_results", {})
         
-        # إذا لم يضع الذكاء الاصطناعي قاموساً، نبحث عن المتغيرات النهائية فقط ونتجاهل المدخلات
         if not final_results_dict:
             valid_vars = {}
             ignore_list = ["k1", "k2", "k3", "t_start", "t_end", "t_eval", "t_span", "num_pts", "y0", "O0", "C0", "fig", "ax"]
@@ -46,8 +44,7 @@ def execute_python_code(code):
                 if k.startswith('_') or k in ["np", "plt", "scipy", "pd"] or k in ignore_list:
                     continue
                 if isinstance(v, (int, float, str, bool, list, tuple, np.ndarray, pd.DataFrame)):
-                    if isinstance(v, np.ndarray) and v.size > 100:
-                        continue
+                    if isinstance(v, np.ndarray) and v.size > 100: continue
                     valid_vars[k] = v
             final_results_dict = valid_vars
 
@@ -57,12 +54,19 @@ def execute_python_code(code):
     finally:
         plt.show = original_show
 
-def speak_text(text):
+def speak_text(text, voice_id):
     clean_text = re.sub(r'\$.*?\$', 'معادلة رياضية', text).replace("#", "").replace("*", "")
-    tts = gTTS(text=clean_text[:3000], lang='ar')
-    audio_bytes = io.BytesIO()
-    tts.write_to_fp(audio_bytes)
-    return audio_bytes
+    clean_text = clean_text[:3000] 
+    
+    async def _generate():
+        communicate = edge_tts.Communicate(clean_text, voice_id)
+        audio_data = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data += chunk["data"]
+        return audio_data
+
+    return asyncio.run(_generate())
 
 def extract_file(file):
     try:
@@ -92,9 +96,6 @@ def call_ai(full_prompt, system_prompt, model_choice, max_tokens=4096):
     except Exception as e:
         return f"حدث خطأ: {e}"
 
-# ==========================================
-# 2. الأدوات المتقدمة
-# ==========================================
 QUICK_ACTIONS = {
     "🔍 بسّط الشرح": "أعد شرح الإجابة السابقة بأسلوب مبسط جداً لطالب جامعي.",
     "🧪 حوّل لبروتوكول": "حوّل الإجابة السابقة إلى بروتوكول تجريبي عملي (خطوات مرقمة).",
@@ -104,9 +105,6 @@ QUICK_ACTIONS = {
     "🎯 مستويات الثقة": "أعد الإجابة مع تصنيف كل معلومة: (مؤكد / محتمل / افتراضي).",
 }
 
-# ==========================================
-# 3. الواجهة الرئيسية
-# ==========================================
 def render():
     st.title("💬 HYDROMEM Chat AI")
     if "messages" not in st.session_state: st.session_state.messages = []
@@ -116,6 +114,21 @@ def render():
         st.subheader("⚙️ الإعدادات")
         model_choice = st.selectbox("المحرك", ["Groq (سريع)", "Gemini (صور وملفات)"])
         persona = st.selectbox("نوع المساعد", list(config.PERSONAS.keys()))
+        
+        # 🌟 قائمة الأصوات الشاملة (تشمل اللهجة اليمنية والفصحى)
+        voices = {
+            "🇾🇪 يمني (صنعاء - ذكر)": "ar-YE-SanaNeural",
+            "🇾🇪 يمني (صنعاء - أنثى)": "ar-YE-AminaNeural",
+            "🇸🇦 فصحى/سعودي (ذكر)": "ar-SA-HamedNeural",
+            "🇸🇦 فصحى/سعودي (أنثى)": "ar-SA-ZariyahNeural",
+            "🇪🇬 مصري (ذكر)": "ar-EG-ShakirNeural",
+            "🇪🇬 مصري (أنثى)": "ar-EG-SalmaNeural",
+            "🇦🇪 إماراتي (ذكر)": "ar-AE-HamdanNeural",
+            "🇦🇪 إماراتي (أنثى)": "ar-AE-FatimaNeural",
+        }
+        selected_voice_name = st.selectbox("🎙️ صوت القراءة:", list(voices.keys()))
+        selected_voice_id = voices[selected_voice_name]
+
         ans_length = st.radio("طول الإجابة:", ["مفصلة (شاملة)", "مختصرة (مركزة)"])
         output_lang = st.radio("لغة الإجابة:", ["العربية", "English", "كلاهما"])
         uploaded_file = st.file_uploader("📎 رفع ملف للتحليل", type=config.SUPPORTED_FILES)
@@ -135,13 +148,11 @@ def render():
             st.session_state.session_id = None
             st.rerun()
 
-    # عرض الرسائل والأدوات
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
             if msg["role"] == "assistant":
-                # 1. تشغيل الكود واستخراج النتائج
                 code_match = re.search(r"```python\n(.*?)```", msg["content"], re.DOTALL)
                 if code_match:
                     if st.button("⚙️ تشغيل الكود واستخراج النتائج", key=f"run_code_{i}"):
@@ -149,32 +160,18 @@ def render():
                             success, output, figs, valid_vars = execute_python_code(code_match.group(1))
                             if success:
                                 st.success("✅ تم التنفيذ بنجاح!")
-                                
-                                # عرض الرسومات
-                                for fig in figs:
-                                    st.pyplot(fig)
-                                
-                                # عرض المطبوعات النصية
-                                if output.strip():
-                                    st.code(output, language="text")
-                                
-                                # عرض النتائج العددية النظيفة
+                                for fig in figs: st.pyplot(fig)
+                                if output.strip(): st.code(output, language="text")
                                 if valid_vars:
                                     st.write("### 📊 النتائج النهائية:")
                                     for k, v in valid_vars.items():
-                                        if isinstance(v, pd.DataFrame):
-                                            st.write(f"**{k}:**")
-                                            st.dataframe(v)
-                                        elif isinstance(v, (int, float)):
+                                        if isinstance(v, (int, float)):
                                             st.metric(label=k, value=f"{v:.4f}" if isinstance(v, float) else str(v))
-                                        elif isinstance(v, (list, tuple)) and len(str(v)) < 100:
+                                        else:
                                             st.write(f"**{k}:** {v}")
-                                        elif isinstance(v, np.ndarray) and v.size <= 100:
-                                            st.write(f"**{k}:** {v.tolist()}")
                             else:
                                 st.error(f"❌ خطأ في الكود: {output}")
                 
-                # 2. الأدوات المتقدمة
                 with st.expander("🛠️ أدوات متقدمة"):
                     st.write("**حوّل هذا الرد إلى:**")
                     cols = st.columns(3)
@@ -191,13 +188,14 @@ def render():
                     with col_a:
                         if st.button("🔊 استمع للرد", key=f"tts_{i}"):
                             with st.spinner("جاري الصوت..."):
-                                try: st.audio(speak_text(msg["content"]), format="audio/mp3")
-                                except: st.error("تعذر الصوت")
+                                try: 
+                                    audio_data = speak_text(msg["content"], selected_voice_id)
+                                    st.audio(audio_data, format="audio/mp3")
+                                except Exception as e: st.error(f"تعذر الصوت: {e}")
                     with col_b:
                         st.code(msg["content"], language="markdown")
 
-    # الإدخال النصي
-    if prompt := st.chat_input("اطلب معادلة، رسماً بيانياً، أو ارفع ملفاً..."):
+    if prompt := st.chat_input("اطلب معادلة، محاكاة، أو ارفع ملفاً..."):
         full_prompt = prompt
         if uploaded_file: full_prompt += f"\n\n[محتوى الملف]:\n{extract_file(uploaded_file)}"
 
