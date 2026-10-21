@@ -7,15 +7,18 @@ import re
 import io
 import contextlib
 import matplotlib
-matplotlib.use('Agg') # ضروري لبيئة Streamlit
+matplotlib.use('Agg') # ضروري لتشغيل الرسوم في Streamlit
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
+import types
 import supabase_utils
 import config
 from gtts import gTTS
 
-# دالة لتنفيذ كود بايثون بأمان والتقاط الرسوم البيانية
+# ==========================================
+# 1. محرك تنفيذ الأكواد واستخراج النتائج
+# ==========================================
 def execute_python_code(code):
     local_vars = {}
     stdout = io.StringIO()
@@ -30,18 +33,29 @@ def execute_python_code(code):
 
     try:
         with contextlib.redirect_stdout(stdout):
-            # تنفيذ الكود مع تمرير المكتبات الأساسية
             exec(code, {"np": np, "plt": plt, "scipy": scipy, "pd": pd}, local_vars)
-        return True, stdout.getvalue(), figs
+        
+        # استخراج الأرقام والجداول النهائية
+        valid_vars = {}
+        for k, v in local_vars.items():
+            if isinstance(v, (int, float, str, bool, list, tuple, np.ndarray, pd.DataFrame)):
+                if not isinstance(v, (types.ModuleType, type)):
+                    if isinstance(v, np.ndarray) and v.size > 100:
+                        continue # تجاهل المصفوفات الضخمة
+                    valid_vars[k] = v
+
+        return True, stdout.getvalue(), figs, valid_vars
     except Exception as e:
-        return False, str(e), []
+        return False, str(e), [], {}
     finally:
         plt.show = original_show
 
-def fix_latex(text):
-    text = text.replace(r"\[", "$$").replace(r"\]", "$$")
-    text = text.replace(r"\begin{cases}", "").replace(r"\end{cases}", "")
-    return text
+def speak_text(text):
+    clean_text = re.sub(r'\$.*?\$', 'معادلة رياضية', text).replace("#", "").replace("*", "")
+    tts = gTTS(text=clean_text[:3000], lang='ar')
+    audio_bytes = io.BytesIO()
+    tts.write_to_fp(audio_bytes)
+    return audio_bytes
 
 def extract_file(file):
     try:
@@ -51,13 +65,6 @@ def extract_file(file):
         elif file.name.endswith((".csv", ".txt")): return file.read().decode("utf-8")
     except Exception as e: return f"خطأ: {e}"
     return ""
-
-def speak_text(text):
-    clean_text = re.sub(r'\$.*?\$', 'معادلة رياضية', text).replace("#", "").replace("*", "")
-    tts = gTTS(text=clean_text[:3000], lang='ar')
-    audio_bytes = io.BytesIO()
-    tts.write_to_fp(audio_bytes)
-    return audio_bytes
 
 def call_ai(full_prompt, system_prompt, model_choice, max_tokens=4096):
     try:
@@ -78,6 +85,21 @@ def call_ai(full_prompt, system_prompt, model_choice, max_tokens=4096):
     except Exception as e:
         return f"حدث خطأ: {e}"
 
+# ==========================================
+# 2. الأدوات المتقدمة
+# ==========================================
+QUICK_ACTIONS = {
+    "🔍 بسّط الشرح": "أعد شرح الإجابة السابقة بأسلوب مبسط جداً لطالب جامعي.",
+    "🧪 حوّل لبروتوكول": "حوّل الإجابة السابقة إلى بروتوكول تجريبي عملي (خطوات مرقمة).",
+    "📚 أضف مراجع APA": "اقترح 3 مراجع علمية موثوقة بصيغة APA.",
+    "🌐 ترجم للإنجليزية": "Translate the previous response into professional academic English.",
+    "📝 اكتب ورقة علمية": "حوّل الإجابة السابقة إلى قسم (Results) جاهز للنشر.",
+    "🎯 مستويات الثقة": "أعد الإجابة مع تصنيف كل معلومة: (مؤكد / محتمل / افتراضي).",
+}
+
+# ==========================================
+# 3. الواجهة الرئيسية
+# ==========================================
 def render():
     st.title("💬 HYDROMEM Chat AI")
     if "messages" not in st.session_state: st.session_state.messages = []
@@ -87,55 +109,104 @@ def render():
         st.subheader("⚙️ الإعدادات")
         model_choice = st.selectbox("المحرك", ["Groq (سريع)", "Gemini (صور وملفات)"])
         persona = st.selectbox("نوع المساعد", list(config.PERSONAS.keys()))
-        uploaded_file = st.file_uploader("📎 رفع ملف", type=config.SUPPORTED_FILES)
+        ans_length = st.radio("طول الإجابة:", ["مفصلة (شاملة)", "مختصرة (مركزة)"])
+        output_lang = st.radio("لغة الإجابة:", ["العربية", "English", "كلاهما"])
+        uploaded_file = st.file_uploader("📎 رفع ملف للتحليل", type=config.SUPPORTED_FILES)
+        
+        st.divider()
+        st.subheader("📚 المحادثات السابقة")
+        email = st.session_state.user.get("email")
+        for s in supabase_utils.get_chats(email):
+            if st.button(s["title"][:20]+"...", key=s["id"]):
+                old = supabase_utils.get_chat_by_id(s["id"])
+                if old:
+                    st.session_state.messages = old["messages"]
+                    st.session_state.session_id = old["id"]
+                    st.rerun()
+        if st.button("➕ محادثة جديدة"):
+            st.session_state.messages = []
+            st.session_state.session_id = None
+            st.rerun()
 
-    # عرض الرسائل
+    # عرض الرسائل والأدوات
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-            # 🔥 الميزة الجديدة: التقاط الكود من رد الذكاء الاصطناعي وتشغيله
             if msg["role"] == "assistant":
+                # 1. تشغيل الكود واستخراج النتائج
                 code_match = re.search(r"```python\n(.*?)```", msg["content"], re.DOTALL)
                 if code_match:
-                    code_to_run = code_match.group(1)
-                    if st.button("⚙️ تشغيل الكود ورسم النتائج", key=f"run_code_{i}"):
-                        with st.spinner("جاري تنفيذ الكود ورسم الأشكال..."):
-                            success, output, figs = execute_python_code(code_to_run)
+                    if st.button("⚙️ تشغيل الكود واستخراج النتائج", key=f"run_code_{i}"):
+                        with st.spinner("جاري التنفيذ والتحليل..."):
+                            success, output, figs, valid_vars = execute_python_code(code_match.group(1))
                             if success:
                                 st.success("✅ تم التنفيذ بنجاح!")
-                                if output:
-                                    st.code(output, language="text")
+                                
+                                # عرض الرسومات
                                 for fig in figs:
                                     st.pyplot(fig)
+                                
+                                # عرض المطبوعات النصية
+                                if output.strip():
+                                    st.code(output, language="text")
+                                
+                                # عرض المتغيرات والنتائج العددية (جداول أو أرقام)
+                                if valid_vars:
+                                    st.write("### 📊 النتائج العددية المستخرجة من الكود:")
+                                    for k, v in valid_vars.items():
+                                        if isinstance(v, pd.DataFrame):
+                                            st.write(f"**{k}:**")
+                                            st.dataframe(v)
+                                        elif isinstance(v, (int, float)):
+                                            st.metric(label=k, value=f"{v:.4f}" if isinstance(v, float) else str(v))
+                                        elif isinstance(v, (list, tuple)) and len(str(v)) < 100:
+                                            st.write(f"**{k}:** {v}")
+                                        elif isinstance(v, np.ndarray) and v.size <= 100:
+                                            st.write(f"**{k}:** {v.tolist()}")
                             else:
                                 st.error(f"❌ خطأ في الكود: {output}")
+                
+                # 2. الأدوات المتقدمة
+                with st.expander("🛠️ أدوات متقدمة"):
+                    st.write("**حوّل هذا الرد إلى:**")
+                    cols = st.columns(3)
+                    for idx, (label, instruction) in enumerate(QUICK_ACTIONS.items()):
+                        with cols[idx % 3]:
+                            if st.button(label, key=f"qa_{i}_{idx}"):
+                                with st.spinner(f"جاري {label}..."):
+                                    sys = f"{config.PERSONAS[persona]}\nأجب بالعربية بدقة."
+                                    new_ans = call_ai(f"الإجابة السابقة: {msg['content']}\n\nالمطلوب: {instruction}", sys, model_choice, 2048)
+                                    st.session_state.messages.append({"role": "assistant", "content": f"**[{label}]**\n\n{new_ans}"})
+                                    st.rerun()
+                    st.divider()
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if st.button("🔊 استمع للرد", key=f"tts_{i}"):
+                            with st.spinner("جاري الصوت..."):
+                                try: st.audio(speak_text(msg["content"]), format="audio/mp3")
+                                except: st.error("تعذر الصوت")
+                    with col_b:
+                        st.code(msg["content"], language="markdown")
 
-                # زر الصوت
-                if st.button("🔊 استمع للرد", key=f"tts_{i}"):
-                    with st.spinner("جاري الصوت..."):
-                        try:
-                            audio_data = speak_text(msg["content"])
-                            st.audio(audio_data, format="audio/mp3")
-                        except: pass
-
-    # الإدخال
+    # الإدخال النصي
     if prompt := st.chat_input("اطلب معادلة، رسماً بيانياً، أو ارفع ملفاً..."):
         full_prompt = prompt
-        if uploaded_file:
-            full_prompt += f"\n\n[محتوى الملف]:\n{extract_file(uploaded_file)}"
+        if uploaded_file: full_prompt += f"\n\n[محتوى الملف]:\n{extract_file(uploaded_file)}"
 
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.markdown(prompt)
 
         with st.chat_message("assistant"):
             with st.spinner("🧠 جاري التفكير..."):
-                system_prompt = f"{config.PERSONAS[persona]}\nأجب بالعربية. استخدم $$ للمعادلات. اختم بـ (الخلاصة)."
+                length_inst = "أجب إجابة مفصلة." if "مفصلة" in ans_length else "أجب إجابة مختصرة."
+                lang_inst = {"العربية": "أجب بالعربية.", "English": "Answer in English.", "كلاهما": "أجب بالعربية ثم الإنجليزية."}[output_lang]
+                system_prompt = f"{config.PERSONAS[persona]}\n{length_inst}\n{lang_inst}\nأجب بدقة. استخدم $$ للمعادلات. اختم بـ (الخلاصة)."
+                
                 answer = call_ai(full_prompt, system_prompt, model_choice)
-                formatted_answer = fix_latex(answer)
-                st.markdown(formatted_answer)
+                st.markdown(answer)
 
-        st.session_state.messages.append({"role": "assistant", "content": formatted_answer})
+        st.session_state.messages.append({"role": "assistant", "content": answer})
         title = st.session_state.messages[0]["content"][:40]
-        st.session_state.session_id = supabase_utils.save_chat(st.session_state.user.get("email"), title, st.session_state.messages, st.session_state.session_id)
+        st.session_state.session_id = supabase_utils.save_chat(email, title, st.session_state.messages, st.session_state.session_id)
         st.rerun()
