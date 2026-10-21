@@ -38,7 +38,6 @@ def submit_payment(email, plan, amount, ref):
     return False, "فشل في إرسال الطلب."
 
 def approve_payment(payment_id, email, plan):
-    # تحديث حالة الدفع وتحديث باقة المستخدم ونوع الحساب
     expiry = (datetime.utcnow() + timedelta(days=30)).isoformat()
     success = supabase_utils.update_user(email, {"plan": plan, "account_type": plan, "expiry_date": expiry})
     if success:
@@ -49,3 +48,31 @@ def approve_payment(payment_id, email, plan):
         except: pass
         return True
     return False
+
+def add_team_member(owner_email, member_name, member_email, member_pwd, member_role):
+    owner = supabase_utils.get_user_by_email(owner_email)
+    if not owner: return False, "المالك غير موجود."
+    
+    plan_info = config.PLANS.get(owner.get("plan", "individual"), config.PLANS["individual"])
+    max_users = plan_info.get("max_users", 1)
+    
+    team_id = owner.get("team_id") or owner["id"]
+    
+    if not owner.get("team_id"):
+        supabase_utils.update_user(owner_email, {"team_id": team_id})
+    
+    current_members = supabase_utils.get_team(team_id)
+    if len(current_members) >= max_users:
+        return False, f"وصلت للحد الأقصى ({max_users} مستخدمين)."
+        
+    if supabase_utils.get_user_by_email(member_email):
+        return False, "البريد الإلكتروني مسجل مسبقاً في المنصة."
+        
+    pwd_hash = hash_pwd(member_pwd)
+    success = supabase_utils.add_user_to_team(
+        team_id, member_email, pwd_hash, member_name, member_role, 
+        owner.get("plan"), owner.get("account_type")
+    )
+    
+    if success: return True, "تمت إضافة العضو بنجاح."
+    return False, "حدث خطأ أثناء الإضافة."
