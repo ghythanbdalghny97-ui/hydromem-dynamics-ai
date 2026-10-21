@@ -17,7 +17,6 @@ import edge_tts
 import supabase_utils
 import config
 
-# تفعيل nest_asyncio
 nest_asyncio.apply()
 
 # ==========================================
@@ -59,7 +58,7 @@ def execute_python_code(code):
         plt.show = original_show
 
 # ==========================================
-# 2. دالة الصوت (بدون تخزين مؤقت معقد)
+# 2. دالة الصوت
 # ==========================================
 def generate_audio_bytes(text, voice_id):
     clean_text = re.sub(r'\$.*?\$', 'معادلة رياضية', text).replace("#", "").replace("*", "")
@@ -167,21 +166,20 @@ def render():
                 code_match = re.search(r"```python\n(.*?)```", msg["content"], re.DOTALL)
                 if code_match:
                     if st.button("⚙️ تشغيل الكود واستخراج النتائج", key=f"run_code_{i}"):
-                        with st.spinner("جاري التنفيذ والتحليل..."):
-                            success, output, figs, valid_vars = execute_python_code(code_match.group(1))
-                            if success:
-                                st.success("✅ تم التنفيذ بنجاح!")
-                                for fig in figs: st.pyplot(fig)
-                                if output.strip(): st.code(output, language="text")
-                                if valid_vars:
-                                    st.write("### 📊 النتائج النهائية:")
-                                    for k, v in valid_vars.items():
-                                        if isinstance(v, (int, float)):
-                                            st.metric(label=k, value=f"{v:.4f}" if isinstance(v, float) else str(v))
-                                        else:
-                                            st.write(f"**{k}:** {v}")
-                            else:
-                                st.error(f"❌ خطأ في الكود: {output}")
+                        success, output, figs, valid_vars = execute_python_code(code_match.group(1))
+                        if success:
+                            st.success("✅ تم التنفيذ بنجاح!")
+                            for fig in figs: st.pyplot(fig)
+                            if output.strip(): st.code(output, language="text")
+                            if valid_vars:
+                                st.write("### 📊 النتائج النهائية:")
+                                for k, v in valid_vars.items():
+                                    if isinstance(v, (int, float)):
+                                        st.metric(label=k, value=f"{v:.4f}" if isinstance(v, float) else str(v))
+                                    else:
+                                        st.write(f"**{k}:** {v}")
+                        else:
+                            st.error(f"❌ خطأ في الكود: {output}")
                 
                 # 2. الأدوات المتقدمة
                 with st.expander("🛠️ أدوات متقدمة"):
@@ -190,21 +188,18 @@ def render():
                     for idx, (label, instruction) in enumerate(QUICK_ACTIONS.items()):
                         with cols[idx % 3]:
                             if st.button(label, key=f"qa_{i}_{idx}"):
-                                with st.spinner(f"جاري {label}..."):
-                                    sys = f"{config.PERSONAS[persona]}\nأجب بالعربية بدقة."
-                                    new_ans = call_ai(f"الإجابة السابقة: {msg['content']}\n\nالمطلوب: {instruction}", sys, model_choice, 2048)
-                                    st.session_state.messages.append({"role": "assistant", "content": f"**[{label}]**\n\n{new_ans}"})
-                                    st.rerun()
+                                sys = f"{config.PERSONAS[persona]}\nأجب بالعربية بدقة."
+                                new_ans = call_ai(f"الإجابة السابقة: {msg['content']}\n\nالمطلوب: {instruction}", sys, model_choice, 2048)
+                                st.session_state.messages.append({"role": "assistant", "content": f"**[{label}]**\n\n{new_ans}"})
+                                st.rerun()
                     
                     st.divider()
                     if st.button("🔊 استمع للرد", key=f"tts_btn_{i}"):
-                        with st.spinner("جاري تجهيز الصوت..."):
-                            try: 
-                                audio_data = generate_audio_bytes(msg["content"], selected_voice_id)
-                                # عرض الصوت مباشرة هنا بدون إعادة تحميل الصفحة
-                                st.audio(audio_data, format="audio/mp3")
-                            except Exception as e: 
-                                st.error(f"تعذر الصوت: {e}")
+                        try: 
+                            audio_data = generate_audio_bytes(msg["content"], selected_voice_id)
+                            st.audio(audio_data, format="audio/mp3")
+                        except Exception as e: 
+                            st.error(f"تعذر الصوت: {e}")
 
     # الإدخال النصي
     if prompt := st.chat_input("اطلب معادلة، محاكاة، أو ارفع ملفاً..."):
@@ -215,13 +210,12 @@ def render():
         with st.chat_message("user"): st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("🧠 جاري التفكير..."):
-                length_inst = "أجب إجابة مفصلة." if "مفصلة" in ans_length else "أجب إجابة مختصرة."
-                lang_inst = {"العربية": "أجب بالعربية.", "English": "Answer in English.", "كلاهما": "أجب بالعربية ثم الإنجليزية."}[output_lang]
-                system_prompt = f"{config.PERSONAS[persona]}\n{length_inst}\n{lang_inst}\nأجب بدقة. استخدم $$ للمعادلات. اختم بـ (الخلاصة)."
-                
-                answer = call_ai(full_prompt, system_prompt, model_choice)
-                st.markdown(answer)
+            length_inst = "أجب إجابة مفصلة." if "مفصلة" in ans_length else "أجب إجابة مختصرة."
+            lang_inst = {"العربية": "أجب بالعربية.", "English": "Answer in English.", "كلاهما": "أجب بالعربية ثم الإنجليزية."}[output_lang]
+            system_prompt = f"{config.PERSONAS[persona]}\n{length_inst}\n{lang_inst}\nأجب بدقة. استخدم $$ للمعادلات. اختم بـ (الخلاصة)."
+            
+            answer = call_ai(full_prompt, system_prompt, model_choice)
+            st.markdown(answer)
 
         st.session_state.messages.append({"role": "assistant", "content": answer})
         title = st.session_state.messages[0]["content"][:40]
