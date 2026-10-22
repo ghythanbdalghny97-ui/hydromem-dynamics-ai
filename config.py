@@ -1,5 +1,8 @@
 import streamlit as st
 
+# ==========================================
+# الإعدادات والمفاتيح
+# ==========================================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
@@ -12,14 +15,57 @@ TOKEN_VALID_DAYS = 30
 
 SUPPORTED_FILES = ["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "csv", "txt"]
 
+# ==========================================
+# الباقات (تم تعديل باقة الشركة وإضافة المستشفى)
+# ==========================================
 PLANS = {
-    "individual": {"name": "👤 فردي", "price_m": 19, "max_users": 1, "allow_pdf": False, "features": ["دردشة ذكية", "محاكاة أساسية", "بدون تصدير PDF"]},
-    "researcher": {"name": "🔬 باحث", "price_m": 79, "max_users": 1, "allow_pdf": True, "features": ["نماذج متقدمة", "تصدير تقارير PDF", "تحليل الملفات"]},
-    "laboratory": {"name": "🧪 مختبر", "price_m": 299, "max_users": 5, "allow_pdf": True, "features": ["كل مميزات الباحث", "إدارة فريق (5 مستخدمين)"]},
-    "university": {"name": "🎓 جامعة", "price_m": 1500, "max_users": 50, "allow_pdf": True, "features": ["كل مميزات المختبر", "50 مستخدم"]},
-    "enterprise": {"name": "🏢 شركة", "price_m": 5000, "max_users": 9999, "allow_pdf": True, "features": ["كل المميزات", "مستخدمين غير محدودين"]}
+    "individual": {
+        "name": "👤 فردي", 
+        "price_m": 19, 
+        "max_users": 1, 
+        "allow_pdf": False, 
+        "features": ["دردشة ذكية", "محاكاة أساسية", "بدون تصدير PDF"]
+    },
+    "researcher": {
+        "name": "🔬 باحث", 
+        "price_m": 79, 
+        "max_users": 1, 
+        "allow_pdf": True, 
+        "features": ["نماذج متقدمة", "تصدير تقارير PDF", "تحليل الملفات"]
+    },
+    "laboratory": {
+        "name": "🧪 مختبر", 
+        "price_m": 299, 
+        "max_users": 5, 
+        "allow_pdf": True, 
+        "features": ["كل مميزات الباحث", "إدارة فريق (5 مستخدمين)"]
+    },
+    "university": {
+        "name": "🎓 جامعة", 
+        "price_m": 1500, 
+        "max_users": 50, 
+        "allow_pdf": True, 
+        "features": ["كل مميزات المختبر", "50 مستخدم", "دعم أكاديمي"]
+    },
+    "hospital": {
+        "name": "🏥 مستشفى", 
+        "price_m": 2500, 
+        "max_users": 100, 
+        "allow_pdf": True, 
+        "features": ["كل مميزات الجامعة", "100 مستخدم", "نماذج طبية متخصصة"]
+    },
+    "enterprise": {
+        "name": "🏢 شركة", 
+        "price_m": 5000, 
+        "max_users": 500,  # 👈 تم تعديل العدد من 9999 إلى 500
+        "allow_pdf": True, 
+        "features": ["كل المميزات", "500 مستخدم", "بيئة خاصة", "أولوية دعم"]
+    }
 }
 
+# ==========================================
+# الهوية الحقيقية للمساعد (System Prompts)
+# ==========================================
 HYDROMEM_CORE_IDENTITY = """
 أنت HYDROMEM AI، مساعد علمي وطبي متقدم ومبرمج خبير.
 أنت تعمل داخل منصة HYDROMEM Dynamics AI التي تدعم (تشغيل الأكواد ورسم الأشكال البيانية).
