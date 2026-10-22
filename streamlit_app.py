@@ -132,13 +132,35 @@ def landing_page():
 
     # الباقات
     st.markdown("### 💎 باقات تناسب الجميع")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.info("👤 **فردي**\n\n$19 / شهر\n\nللاستخدام الشخصي والتعلم.")
-    with col2:
-        st.success("🔬 **باحث**\n\n$79 / شهر\n\nتصدير تقارير PDF وتحليل الملفات.")
-    with col3:
-        st.warning("🏢 **شركة**\n\n$5000 / شهر\n\nإدارة فريق غير محدود وبيئة خاصة.")
+    
+    # دالة مساعدة لرسم بطاقة الباقة
+    def render_plan_card(col, plan_key, color):
+        p = config.PLANS[plan_key]
+        features_html = "".join([f"<li>{f}</li>" for f in p['features']])
+        col.markdown(f"""
+        <div style="background: #1E2329; padding: 20px; border-radius: 10px; border: 1px solid {color}; height: 100%;">
+            <h3 style="color: {color}; margin-top: 0; text-align:center;">{p['name']}</h3>
+            <h4 style="color: #FAFAFA; margin-bottom: 15px; text-align:center;">${p['price_m']} / شهر</h4>
+            <hr style="border-color: #2D333B;">
+            <ul style="list-style-type: none; padding-left: 0; color: #A0AAB5; font-size: 0.9rem; line-height: 1.6;">
+                {features_html}
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # الصف الأول (الفردي، الباحث، المختبر)
+    row1 = st.columns(3)
+    render_plan_card(row1[0], "individual", "#4CAF50")
+    render_plan_card(row1[1], "researcher", "#2196F3")
+    render_plan_card(row1[2], "laboratory", "#9C27B0")
+        
+    st.write("") # مسافة بين الصفين
+    
+    # الصف الثاني (الجامعة، المستشفى، الشركة)
+    row2 = st.columns(3)
+    render_plan_card(row2[0], "university", "#FF9800")
+    render_plan_card(row2[1], "hospital", "#F44336")
+    render_plan_card(row2[2], "enterprise", "#607D8B")
 
     st.divider()
 
